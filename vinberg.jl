@@ -2,13 +2,82 @@
 #using Hecke
 #using AbstractAlgebra
 using LinearAlgebra
-
+using SymPy
 
 # Code adapted from N. V. Bogachev and A. Yu. Perepechko:
 #
 #   https://github.com/aperep/vinberg-algorithm
 #
 #
+
+
+function diagonalize(A)
+    # returns T and D with G = TDT'
+    # algorithm copied from there https://math.stackexchange.com/questions/1388421/reference-for-linear-algebra-books-that-teach-reverse-hermite-method-for-symmetr
+    #
+    
+    A = BigInt.(A)
+
+    n = size(A)[1]
+    i0 = 1
+    M = [A I]
+    while i0 ≤ n
+
+        
+        if M[i0,i0] ≠ 0
+            for i in range(i0+1,stop=n)
+                g =  gcd(M[i0,i0],M[i0,i])
+                mizi = M[i0,i]//g
+                miziz = M[i0,i0]//g
+                M[i,:] = (-mizi*M[i0,:] + miziz*M[i,:])
+                M[:,i] = (-mizi*M[:,i0] + miziz*M[:,i])
+                #M[i,:] = (-M[i,i0]*M[i0,:] + M[i0,i0]*M[i,:])//g
+                #M[:,i] = (-M[i0,i]*M[:,i0] + M[i0,i0]*M[:,i])//g
+            end
+
+            i0 = i0 + 1
+
+        elseif M[i0,i0] == 0 && any(M[k,k]≠0 for k in range(i0+1,stop=n)) 
+            k = [k for k in range(i0+1,stop=n) if M[k,k]≠0][1]
+            M[i0,:], M[k,:] = M[k,:], M[i0,:]
+            M[:,i0], M[:,k] = M[:,k], M[:,i0]
+        elseif any(M[i,j] ≠ 0 for i in range(i0,stop=n), j in range(i0,stop=n))
+            (i,j) = [(i,j) for  i in range(i0,stop=n), j in range(i0,stop=n) if M[i,j]≠0][1]
+            M[i,:] = M[i,:] + M[j,:]
+            M[:,i] = M[:,i] + M[:,j]
+        end
+    end
+   
+
+    D = M[1:n,1:n]
+    Q = M[1:n,n+1:2*n]
+    P = Q'
+    
+    @assert LinearAlgebra.isdiag(D) "D is diagonal", D
+    @assert P'*A*P == D "We have a diagonalization"
+
+    
+    return (D,P)
+
+end
+
+function test_diagonalize()
+    
+    for i in range(1,stop=100)
+        println("-")
+        for n in range(4,stop=10)
+            print(n,", ")
+
+            M = rand(range(-20,stop=20),n,n)
+            M = M + M' # make it symmetric
+            @assert LinearAlgebra.issymmetric(M)
+            (D,P) = diagonalize(M)
+            @assert P'*M*P == D
+
+        end
+    end
+
+end 
 
 function signature(G)
     
@@ -66,20 +135,15 @@ function negative_vector(G)
     # M originated from the perceived need to multiply v0 (as returned by the following loop) by a suitably large
     # number for its integer approximation to be precise but maybe that's not needed…
 
+    D,T = diagonalize(G)     
+    
 
-    D, T =  LinearAlgebra.eigen(G)
-    println("-------------")
-    println(T)
-    println("-------------")
-    println(inv(T))
-    println("-------------")
-    for i in eachindex(D) 
+    for i in eachindex(D)
         if D[i] < 0
             v0 = T[i,:]
             break
         end
     end
-    v0 = [Int(round(M*x,digits=0)) for x in v0]
     v0 = (1/gcd(v0))*v0
     
     @assert inner_product(v0,v0,G) < 0 "v₀ must have negative norm"
@@ -145,6 +209,8 @@ G = [1 2 3;
      3 4 5]
 
 
+
+test_diagonalize()
 Vinberg_Algorithm(G1)
 Vinberg_Algorithm(G2)
 #Vinberg_Algorithm(G)
