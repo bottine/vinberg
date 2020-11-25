@@ -8,6 +8,17 @@ using SymPy
 #
 #   https://github.com/aperep/vinberg-algorithm
 
+
+# TODO
+#
+# * See here for memoization: https://github.com/JuliaCollections/Memoize.jl
+# * Extensive unit tests!
+#
+
+
+include("util.jl")
+include("qsolve.jl")
+
 struct QuadLattice
     n_pos::Integer
     n_neg::Integer
@@ -26,7 +37,11 @@ function QuadLattice(G)
     n_pos = np-1
     n_neg = 1
     D,P = diagonalize(G)
+    println() 
+    display(D)
+    println()
     @assert P'*G*P == D
+    @assert Diagonal(D) == D
     D = diag(D) # Get the diagonal vector of `D` 
 
     return QuadLattice(n_pos,n_neg,G,P,D)
@@ -41,8 +56,10 @@ struct QuadLatticeElement
     vec::Array{BigInt,1}
 end
 
+same_quad_lattice(v::QuadLatticeElement,w::QuadLatticeElement) = v.L == w.L
+
 function inner_product(v::QuadLatticeElement,w::QuadLatticeElement)
-    @assert v.L == w.L "The elements must belong to the same lattice"
+    @assert same_quad_lattice(v,w) "The elements must belong to the same lattice"
     G = v.L.G
     vv = v.vec
     ww = w.vec
@@ -65,12 +82,12 @@ function standard_basis(L::QuadLattice)
 end
 
 function Base.:-(v::QuadLatticeElement)         ## the `Base.:` syntax is necessary to make julia undenstand that we want to extend the function `-` to our type
-    @assert v.L == w.L "The elements must belong to the same lattice"
+    @assert same_quad_lattice(v,w) "The elements must belong to the same lattice"
     return QuadLatticeElement(-v.vec,v.L)
 end 
 
 function Base.:+(v::QuadLatticeElement,w::QuadLatticeElement)
-    @assert v.L == w.L "The elements must belong to the same lattice"
+    @assert same_quad_lattice(v,w) "The elements must belong to the same lattice"
     return QuadLatticeElement(v.vec+w.vec,v.L)
 end 
 
@@ -80,93 +97,65 @@ end
 
 function is_root(v::QuadLatticeElement)
 
+    if norm(v) < 0
+        return false
+    end
+
     return all(2*(e⊙v) % v⊙v == 0 for e in standard_basis(v.L))
 
 end
 
 function reflection(r::QuadLatticeElement,v::QuadLatticeElement)
    
+    @assert same_quad_lattice(v,r) "The elements must belong to the same lattice"
     @assert is_root(r) "r needs to be a root"
 
     return v - (2*(r⊙v)/(r⊙r))*r
 
 end
 
-
-#function diagonalize(A::LinearAlgebra.Symmetric{Core.Integer,Array{Core.Integer,2}})
-function diagonalize(A)
-    # returns T and D with G = TDT'
-    # algorithm copied from there https://math.stackexchange.com/questions/1388421/reference-for-linear-algebra-books-that-teach-reverse-hermite-method-for-symmetr
-    # plus a gcd step to reduce the growth of values 
-    
-    A = BigInt.(A)
-
-    n = size(A)[1]
-    i0 = 1
-    M = [A I]
-    while i0 ≤ n
-
-        if M[i0,i0] ≠ 0
-            
-            for i in range(i0+1,stop=n)
-                g =  gcd(M[i0,i0],M[i0,i])
-                mizi = M[i0,i]//g
-                miziz = M[i0,i0]//g
-                M[i,:] = (-mizi*M[i0,:] + miziz*M[i,:])
-                M[:,i] = (-mizi*M[:,i0] + miziz*M[:,i])
-            end
-            i0 = i0 + 1
-
-        elseif any(M[k,k]≠0 for k in range(i0+1,stop=n)) 
-
-            k = [k for k in range(i0+1,stop=n) if M[k,k]≠0][1]
-            M[i0,:], M[k,:] = M[k,:], M[i0,:]
-            M[:,i0], M[:,k] = M[:,k], M[:,i0]
-        
-        elseif any(M[i,j] ≠ 0 for i in range(i0,stop=n), j in range(i0,stop=n))
-        
-            (i,j) = [(i,j) for  i in range(i0,stop=n), j in range(i0,stop=n) if M[i,j]≠0][1]
-            M[i,:] = M[i,:] + M[j,:]
-            M[:,i] = M[:,i] + M[:,j]
-        
-        end
-
-    end
-   
-
-    D = M[1:n,1:n]
-    Q = M[1:n,n+1:2*n]
-    P = Q'
-    
-    println(det(P))
-
-    @assert LinearAlgebra.isdiag(D) "D is diagonal", D
-    @assert P'*A*P == D "We have a diagonalization"
-
-    
-    return (D,P)
-
+# I **think** this is the last invariant factor (Prop 1 in Bogachev&Perepechko)
+# TODO: check that? what does it mean?
+function last_invariant_factor(L::QuadLattice)
+    return abs(det(L.G)/gcd(adjoint(L.G)))
 end
 
-function test_diagonalize()
+function vec(v::QuadLatticeElement)
+    return v.vec
+end
+
+# The vectors [v0 v1 … v_n] = P are orthogonal, hence linearly independent, so that they span a finite index subgroup of L.
+# This function should spit out a set of representatives 
+function diagonalization_representatives(L::QuadLattice)
     
-    for i in range(1,stop=10)
-        println("-")
-        for n in range(4,stop=10)
-            print(n,", ")
+    P = L.P
+    G = L.G
+    
+    # The columns of P define a basis for the subgroup, so any element in the subgroup must lie in the parallelipiped spanned by these vectors
+    # get_integer_points returns exactly those elements
 
-            #M = rand(range(-20,stop=20),n,n)
-            M = rand(range(-10,stop=10),n,n)
-            M = M + M' # make it symmetric
-            @assert LinearAlgebra.issymmetric(M)
-            (D,P) = diagonalize(M)
-            println(maximum(D),maximum(P))
-            @assert P'*M*P == D
-
-        end
-    end
+    return (x -> QuadLatticeElement(x,L)).(get_integer_points(P,rank(L)))
 
 end 
+
+
+# Presumably any root must have length dividing twice the last invariant factor
+function root_lengths(L::QuadLattice)
+    return [k for k in 1:last_invariant_factor(L) if last_invariant_factor(L)%k == 0]
+end
+
+# The distance between the hyperplane H_{e} and the point v0
+function distance_to_hyperplane(v0::QuadLatticeElement, e::QuadLatticeElement)
+    
+    @assert same_quad_lattice(v0,e) "The elements must belong to the same lattice"
+    @assert is_root(e)
+    
+    return asinh( sqrt( - (e⊙v0)^2 / ( norm(e)*norm(v0) ) ) )
+
+end 
+
+#function diagonalize(A::LinearAlgebra.Symmetric{Core.Integer,Array{Core.Integer,2}})
+
 
 function signature(G)
     
@@ -211,11 +200,12 @@ function negative_vector(L::QuadLattice)
 
     # D Necessarily has one negative entry since of signature (n,1)
     # Find the element corresponding to this negative entry
-    v0 = [P[i,:] for i in eachindex(D) if D[i]<0][1]
+    v0 = [P'[i,:] for i in eachindex(D) if D[i]<0][1]
     # normalize it 
-    v0 = (1/gcd(v0))*v0
+    v0 = (1//gcd(v0))*v0
     
     v0 = QuadLatticeElement(L,v0)
+    
 
     # verify that it indeed has negative norm
     @assert norm(v0) < 0 "v₀ must have negative norm"
@@ -224,53 +214,28 @@ function negative_vector(L::QuadLattice)
 
 end
 
-function first_roots(P,D)
-    # Let's follow p.112 of Guglielmetti
-    
-#    seen = Set()
-#    roots = Set()
-#    for i in  eachindex(D) if D[i] ∉ seen
-#        push!(seen,D[i])
-#        
-#        push!(roots, P[i,:])
-#        last_j = i
-#        for j in eachindex(D) if j > i && D[j] == D[i]
-#                push!(roots, P[j,:] - P[last_j,:])
-#                last_j = j
-#        end end
-#
-#    end end
-#    return roots
-#
-end
+function roots_of_fundamental_cone(v0::QuadLatticeElement)
 
-function get_integer_points(M,n)
-    
-    @assert (n,n) == size(M) "Matrix should be square"
-    @assert (n,0) == signature(M)
-
-    negative = [sum([min(v,0) for v in M[i,:]]) for i in range(1,stop=n)]
-    positive = [sum([max(v,0) for v in M[i,:]]) for i in range(1,stop=n)]
-
-    bounding_box = [ [] ]
-    for i in range(1,stop=n)
-        neg_i = negative[i]
-        pos_i = positive[i]
-        bounding_box = [hcat(vec, val) for vec in bounding_box for val in range(neg_i-1,stop=pos_i+1)] 
-    end
-
-    function parallelipiped_contains(v)
-        Q = v/M
-        return all(c < 1 && c >= 0 for c in Q)
-    end
-    
-    return [v for v in bounding_box if parallelipiped_contains(v)]
+    return []
 
 end
 
 
 
+struct RootsByDistance
+   v0::QuadLatticeElement
+   norm::Integer
+   current_batch::Array{QuadLattice,(1)}
+end
 
+function next!(r::RootsByDistance)
+    return r.v0 # that's not a root 
+end
+
+
+function is_finite_volume(roots::Array{QuadLatticeElement,(1)})
+    false
+end
 
 function Vinberg_Algorithm(G)
 
@@ -279,20 +244,27 @@ function Vinberg_Algorithm(G)
 
     # We first start with just one point of the fundamental domain.
     v0 = negative_vector(L)
-    
-#    M1 = G # should be gram matrix of v₀^⟂
-#    M2 = G # should be the matrix associated to V1, but I don't know what it is
-#    W = sort(get_integer_points([M2,v0]),by=w -> -(w⊙v0))
-#    
-#    En = abs(det(G)/gcd(adjoint(M)))
-#    root_lengths = [k for k in range(1,2*En+1) if (2*En)%k == 0]
-#
-#    roots = first_roots(P,d)
-#
+   
+    roots::Array{QuadLatticeElement,(1)} = []
+
+    append!(roots, roots_of_fundamental_cone(v0))
+
+
+#    while ! is_finite_volume(roots)
+#        new_root = next!()
+#       push!(roots,new_root)
+#        println("hello")
+#    end
 
 
 end
 
+
+G0 = [-3 0 0 0;
+       0 1 0 0;
+       0 0 1 0;
+       0 0 0 2;
+     ]
 
 G1= [-10 0  0 0; 
       0  2  -1 0; 

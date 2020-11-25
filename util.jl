@@ -77,6 +77,8 @@ function diagonalize(A)
     return (D,P)
 
 end
+
+
 function test_diagonalize()
     
     for i in 1:10
