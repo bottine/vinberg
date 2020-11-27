@@ -13,7 +13,8 @@ using Base
 function diagonalize(A)
     # returns T and D with D = T'GT
     # algorithm copied from there https://math.stackexchange.com/questions/1388421/reference-for-linear-algebra-books-that-teach-reverse-hermite-method-for-symmetr
-    # plus a gcd step to reduce the growth of values 
+    # plus a gcd step to reduce the growth of values
+    # plus the "Case 0" step to further reduce, but it's not enough
     
     A = BigInt.(A)
 
