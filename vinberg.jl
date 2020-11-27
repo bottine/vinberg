@@ -37,9 +37,6 @@ function QuadLattice(G)
     n_pos = np-1
     n_neg = 1
     D,P = diagonalize(G)
-    println() 
-    display(D)
-    println()
     @assert P'*G*P == D
     @assert Diagonal(D) == D
     D = diag(D) # Get the diagonal vector of `D` 
