@@ -16,24 +16,29 @@ function diagonalize(A)
     # plus a gcd step to reduce the growth of values
     # plus the "Case 0" step to further reduce, but it's not enough
     
+
     A = BigInt.(A)
 
     n = size(A)[1]
     i0 = 1
     M = [A I]
     while i0 ≤ n
-        
-        
-        
-        min_i = sort(i0:n,by=(idx->abs(M[idx,idx])))[1]
-        k = min_i 
-        if min_i ≠ i0
-            #println("Case 0")
+       
+      
+        # look at non zero diagonal entries
+        non_zero_diag = sort([k for k in i0:n if M[k,k] ≠ 0],by=(k -> abs(M[k,k])))
+
+
+        if length(non_zero_diag) == 0
+            (i,j) = sort([(i,j) for  i in i0:n, j in i0:n if M[i,j]≠0], by=((i,j)-> abs(M[i,j])))[1]
+            M[i,:] = M[i,:] + M[j,:]
+            M[:,i] = M[:,i] + M[:,j]
+        else
+            
+            k = non_zero_diag[1]
             M[i0,:], M[k,:] = M[k,:], M[i0,:]
             M[:,i0], M[:,k] = M[:,k], M[:,i0]
 
-        elseif M[i0,i0] ≠ 0
-            #println("case I") 
             for i in i0+1:n
                 g =  gcd(M[i0,i0],M[i0,i])
                 mizi = M[i0,i]//g
@@ -42,27 +47,7 @@ function diagonalize(A)
                 M[:,i] = (-mizi*M[:,i0] + miziz*M[:,i])
             end
             i0 = i0 + 1
-
-        elseif any(M[k,k]≠0 for k in i0+1:n) 
-            #println("case II") 
-
-            k = [k for k in i0+1:n if M[k,k]≠0][1]
-            M[i0,:], M[k,:] = M[k,:], M[i0,:]
-            M[:,i0], M[:,k] = M[:,k], M[:,i0]
-            
-            # Now we're good for case I
-        
-        elseif any(M[i,j] ≠ 0 for i in i0:n, j in i0:n)
-            #println("case III") 
-        
-            (i,j) = sort([(i,j) for  i in i0:n, j in i0:n if M[i,j]≠0], by=((i,j)-> abs(M[i,j])))[1]
-            M[i,:] = M[i,:] + M[j,:]
-            M[:,i] = M[:,i] + M[:,j]
-
-            # Now we're good for case II
-        
         end
-
     end
    
 
@@ -81,18 +66,17 @@ end
 
 
 function test_diagonalize()
-    
-    for i in 1:10
-        println("-")
-        for n in 4:10
-            print(n,", ")
-
+   
+   
+    for n in 4:20
+        println("\nn is $n")
+        for i in 1:4*(20-n)
+            print(".")
             #M = rand(-20:20,n,n)
-            M = rand(-10:10,n,n)
+            M = rand(-20:20,n,n)
             M = M + M' # make it symmetric
             @assert LinearAlgebra.issymmetric(M)
             (D,P) = diagonalize(M)
-            println(maximum(D),maximum(P))
             @assert P'*M*P == D
 
         end
@@ -101,9 +85,12 @@ function test_diagonalize()
 end 
 
 function get_integer_points(M)
-   
+  
+    M = Rational{Int}.(M)
+
     n = size(M,1)
     @assert (n,n) == size(M) "Matrix should be square (and invertible)"
+    @assert det(M) ≠ 0 "Matrix should be square (and invertible)"
 
     minimum = [sum([min(v,0) for v in M[i,:]]) for i in 1:n]
     maximum = [sum([max(v,0) for v in M[i,:]]) for i in 1:n]
@@ -127,4 +114,28 @@ function get_integer_points(M)
 
 end
 
+function test_get_integer_points()
+    
+    for n in 4:20
+        println("\nn is $n")
+        for i in 1:4*(20-n)
+            M = rand(-10:10,n,n)
+            println("M is")
+            display(M)
+            println()
+            println(length(get_integer_points(M)))
+        end
+    end
 
+end
+
+
+
+    bad_mat = [
+    0  -12  -10   -6;
+    -12  -20    9   -3;
+    -10    9    2   11;
+    -6   -3   11  -20]
+
+    diagonalize(bad_mat)
+ 

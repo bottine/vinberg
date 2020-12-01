@@ -2,7 +2,7 @@
 #using Hecke
 #using AbstractAlgebra
 using LinearAlgebra
-using SymPy
+# using SymPy
 
 # Code adapted from N. V. Bogachev and A. Yu. Perepechko:
 #
@@ -38,7 +38,7 @@ function QuadLattice(G)
     n_neg = 1
     D,P = diagonalize(G)
     @assert P'*G*P == D
-    @assert Diagonal(D) == D
+    @assert isdiag(D)
     D = diag(D) # Get the diagonal vector of `D` 
 
     return QuadLattice(n_pos,n_neg,G,P,D)
@@ -227,6 +227,20 @@ end
 
 function next!(r::RootsByDistance)
     return r.v0 # that's not a root 
+end
+
+
+function roots_decomposed_into(s,a,k)
+    # cf eponimous function in B&P's code
+
+    # We are looking for a root ``v = a₀v₀ + v₁ + w``
+    # satisfying 
+    # * ``v⊙v = k``
+    # * ``a₀v₀ = a``
+    # * ``w`` one of the representatives of Lbis (tbdefined)
+
+    
+
 end
 
 

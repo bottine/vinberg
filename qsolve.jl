@@ -1,6 +1,6 @@
 ## Copied from qsolve.py
 
-using Plots
+# using Plots
 using LinearAlgebra
 using Base
 
@@ -43,9 +43,17 @@ function bounding_box_diago(A,b,γ)
 
     value(x) = x' * Diagonal(A) * x + b' * x + γ
 
-    x,minval = qform_minimum(Diagonal(A),b,γ)
-    #println("returnning $x, $minval")
-    # since A is diago, this could be done by hand 
+    function qform_minimum_diago(A,b,γ)
+        x = []
+        for i in eachindex(A)
+            push!(x, -b[i]/(2*A[i]))
+        end
+        return (x,value(x))
+    end
+
+
+    x,minval = qform_minimum_diago(A,b,γ)
+    # could also have used x,minval = qform_minimum(Diagonal(A),b,γ)
     
     if minval ≥ 0
         return Set()
@@ -168,5 +176,34 @@ function test_qsolve()
     b = [-1; -2]
     c = -220
     A = P'*D*P
-    @assert qsolve_naive(A,b,c) == Set(Any[BigFloat[8.0, -6.0]]) 
+    @assert qsolve_naive(A,b,c) == Set(Any[BigFloat[8.0, -6.0]])
+
+    D = [1 0;
+         0 1]
+    P = [1 0;
+         0 1]
+    b = [0; 0]
+    c = -25
+    A = P'*D*P
+    @assert qsolve_naive(A,b,c) == Set(Any[[-5.0, 0.0], [3.0, 4.0], [4.0, 3.0], [0.0, 5.0], [-4.0, -3.0], [3.0, -4.0], [0.0, -5.0], [4.0, -3.0], [-3.0, -4.0], [-3.0, 4.0], [5.0, 0.0], [-4.0, 3.0]])
+
+
+
+    
+    D = [1 0 0;
+         0 1 0;
+         0 0 1]
+    
+    P = [1 0 0;
+         0 1 0;
+         0 0 1]
+    
+    A = P'*D*P
+    
+    b = [0; 0; 0]
+    c = -26
+    
+    println(qsolve(A,b,c))
+
+
 end
