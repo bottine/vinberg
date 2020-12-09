@@ -54,7 +54,12 @@ function diagonalize(A)
     D = M[1:n,1:n]
     Q = M[1:n,n+1:2*n]
     P = Q'
-    
+   
+    println("----------------------------")
+    println()
+    display(P)
+    println()
+    println("----------------------------")
 
     @assert LinearAlgebra.isdiag(D) "D is diagonal", D
     @assert P'*A*P == D "We have a diagonalization"
@@ -100,6 +105,7 @@ function get_integer_points(M)
         bounding_box = [vcat(vec, [val]) for vec in bounding_box for val in minimum[i]:maximum[i]-1] 
     end
     
+    println("bdng_box size $(length(bounding_box))")
 
     function parallelipiped_contains(v)
         Q = inv(M)*v
@@ -114,28 +120,43 @@ function get_integer_points(M)
 
 end
 
+function get_sublattice_representatives(M)
+  
+    M = Rational{Int}.(M)
+
+
+    n = size(M,1)
+    @assert (n,n) == size(M) "Matrix should be square (and invertible)"
+    @assert det(M) ≠ 0 "Matrix should be square (and invertible)"
+
+    M2 = M
+    for i in 2:n
+        if M2[i,:] ⋅ M2[1,:] < 0
+            println("hello")
+            M2[i,:] = -M2[i,:]
+            @assert M2[i,:] ⋅ M2[1,:] > 0
+        end
+    end
+
+    println("-----------------")
+    @assert length(get_integer_points(M)) == length(get_integer_points(M2))
+
+end
+
+
+
+
 function test_get_integer_points()
     
-    for n in 4:20
+    for n in 4:6
         println("\nn is $n")
-        for i in 1:4*(20-n)
+        for i in 1:4*(10-n)
             M = rand(-10:10,n,n)
-            println("M is")
-            display(M)
-            println()
-            println(length(get_integer_points(M)))
+            get_integer_points(M)
         end
     end
 
 end
 
 
-
-    bad_mat = [
-    0  -12  -10   -6;
-    -12  -20    9   -3;
-    -10    9    2   11;
-    -6   -3   11  -20]
-
-    diagonalize(bad_mat)
  
