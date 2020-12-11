@@ -1,8 +1,9 @@
 ## Copied from qsolve.py
 
+using Convex, GLPK
 using LinearAlgebra
 using Base
-
+using MathOptInterface
 
 
 
@@ -54,7 +55,12 @@ function diagonalize(A)
     D = M[1:n,1:n]
     Q = M[1:n,n+1:2*n]
     P = Q'
-    
+   
+    println("----------------------------")
+    println()
+    display(P)
+    println()
+    println("----------------------------")
 
     @assert LinearAlgebra.isdiag(D) "D is diagonal", D
     @assert P'*A*P == D "We have a diagonalization"
@@ -100,6 +106,7 @@ function get_integer_points(M)
         bounding_box = [vcat(vec, [val]) for vec in bounding_box for val in minimum[i]:maximum[i]-1] 
     end
     
+    println("bdng_box size $(length(bounding_box))")
 
     function parallelipiped_contains(v)
         Q = inv(M)*v
@@ -114,16 +121,39 @@ function get_integer_points(M)
 
 end
 
+function get_sublattice_representatives(M)
+  
+    M = Rational{Int}.(M)
+
+
+    n = size(M,1)
+    @assert (n,n) == size(M) "Matrix should be square (and invertible)"
+    @assert det(M) ≠ 0 "Matrix should be square (and invertible)"
+
+    M2 = M
+    for i in 2:n
+        if M2[i,:] ⋅ M2[1,:] < 0
+            println("hello")
+            M2[i,:] = -M2[i,:]
+            @assert M2[i,:] ⋅ M2[1,:] > 0
+        end
+    end
+
+    println("-----------------")
+    @assert length(get_integer_points(M)) == length(get_integer_points(M2))
+
+end
+
+
+
+
 function test_get_integer_points()
     
-    for n in 4:20
+    for n in 4:6
         println("\nn is $n")
-        for i in 1:4*(20-n)
+        for i in 1:4*(10-n)
             M = rand(-10:10,n,n)
-            println("M is")
-            display(M)
-            println()
-            println(length(get_integer_points(M)))
+            get_integer_points(M)
         end
     end
 
@@ -131,11 +161,40 @@ end
 
 
 
-    bad_mat = [
-    0  -12  -10   -6;
-    -12  -20    9   -3;
-    -10    9    2   11;
-    -6   -3   11  -20]
+#function is_necessary_hyperplane(cone_roots::Array{Array{Int,1},1},A::Array{Int,2},root::Array{Int,1})
+function is_necessary_hyperplane(cone_roots,A,root)
+    # The elements of cone_roots are roots of the lattice, and the cone they represent 
+    # is the elements x in real space satisfying x'*A*r ≤ 0 for all r in cone_roots.
+    # want to check that the cone obtained by intersecting with the half-space defined by r is strictly contained.
+    # This should be equivalent to the cone C intersecting \{x : x'*A*root > 0\} non trivially.
 
-    diagonalize(bad_mat)
- 
+    n = size(A,1)
+    @assert size(A) == (n,n)
+    @assert A' == A
+    
+    # x' * (A * r) ≤ 0 ∀ r
+    # (A * r)' * x ≤ 0 ∀ r
+
+    x = Variable(n, IntVar)
+    p = satisfy()       # satisfiability question 
+    for cone_root in cone_roots
+        p.constraints += x' * (A*cone_root) ≤ 0 # hyperplanes defining the cone
+    end
+    p.constraints += x' * (A*root) ≥ 1 # other side of the half space defined by root
+    # it should only be strictly bigger than zero, but Convex.jl does not do "strictly", so we change it to ≥ 1 (and since we have a cone, it should be the same result)
+
+    
+    solve!(p,GLPK.Optimizer())
+   
+
+    if p.status == MathOptInterface.INFEASIBLE 
+        return false
+    elseif p.status == MathOptInterface.OPTIMAL
+        println(p.optval)
+        return true
+    else
+        println("can't tell!")
+    end
+
+
+end
