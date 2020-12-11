@@ -7,9 +7,16 @@
 @enum EndType begin
     ASimpleBranch
     ASingleFour
-    ASingleInfty
     ALoop
     NoEnd
+    # Above are the only ones needed for non sporadic
+    TwoOneBranch    # Needed for E types
+    TwoTwoBranch    # Needed for E types
+    ThreeOneBranch  # Needed for E types
+    ASingleNgeq5    
+    ASingleInfty
+    AFourAndThen    # Needed for F_4
+
 end
 
 struct ConnectedInducedSubDiagram
@@ -43,7 +50,35 @@ macro iff(condition, comment)
         end
     end
 end
-function is_non_sporadic_subdiagram(c::ConnectedInducedSubDiagram,D,n)
+
+
+function is_path(vv,D,first=(x -> x == 3),last=(x -> x == 3))
+    n = length(vv)
+    for i in 1:n, j in i+1:n
+        if i == 1 && j == 2
+            if !first(D[vv[i],vv[j]])
+                return false
+            end
+        elseif i==n-1 && j == n 
+            if !last(D[vv[i],vv[j]])
+                return false
+            end
+        elseif j == i+1
+            if D[vv[i],vv[j]] ≠ 3
+                return false
+            end
+        elseif j > i+1
+            if D[vv[i],vv[j]] ≠ 2
+                return false
+            end
+        else
+            @assert false "unreachable"
+        end
+    end
+    return true
+end
+
+function is_subdiagram(c::ConnectedInducedSubDiagram,D,n)
     # D is the Coxeter matrix
     # c the subdiagram
     #
@@ -58,30 +93,46 @@ function is_non_sporadic_subdiagram(c::ConnectedInducedSubDiagram,D,n)
     
     if card(c) == 0
     
-        return true
+        return true, "empty"
     
     elseif card(c) == 1
         
-        return true
+        return true, "singleton"
     
     elseif card(c) == 2
         
         u = vv[1]
         v = vv[2]
 
-        @iff(D[u,v] == 3 || D[u,v] == 4, "If only two vertices, the edge must be a 4 or a 3")
+        if D[u,v] == 3
+            return true, "simple edge"
+        elseif D[u,v] == 4
+            return true, "simple four edge"
+        elseif D[u,v] == -1 # -1 == ∞
+            return true, "simple ∞ edge"
+        elseif D[u,v] ≥ 5
+            return true, "simple n≥5 edge"
+        else
+            return false
+        end
+
     
 
     elseif card(c) == 3
         if c.left_end == NoEnd && c.right_end == NoEnd
-            @iff((D[vv[1],vv[2]], D[vv[2],vv[3]],D[vv[1],vv[3]]) == (3,3,2), 
-                 "must have *-3-*-3-*")
+            return is_path(vv,D)
         elseif c.left_end == NoEnd && c.right_end == ASingleFour 
-            @iff((D[vv[1],vv[2]], D[vv[2],vv[3]],D[vv[1],vv[3]]) == (3,4,2),
-                 "must have *-3-*-4-*")
+            return is_path(vv,D,last=(x->x==4))
         elseif c.left_end == ASingleFour && c.right_end == NoEnd 
-            @iff((D[vv[1],vv[2]], D[vv[2],vv[3]],D[vv[1],vv[3]]) == (4,3,2), 
-                 "must have *-4-*-3-*")
+            return is_path(vv,D,first=(x->x==4))
+        elseif c.left_end == NoEnd && c.right_end == ASingleInfty 
+            return is_path(vv,D,last=(x->x==-1))
+        elseif c.left_end == ASingleInfty && c.right_end == NoEnd 
+            return is_path(vv,D,first=(x->x==-1))
+        elseif c.left_end == NoEnd && c.right_end == ASingleNgeq5
+            return is_path(vv,D,last=(x->x∈Set([5,6])))
+        elseif c.left_end == ASingleNgeq5 && c.right_end == NoEnd 
+            return is_path(vv,D,first=(x->x∈Set([5,6])))
         elseif c.left_end == ALoop && c.right_end == ALoop 
             @iff((D[vv[1],vv[2]], D[vv[2],vv[3]],D[vv[1],vv[3]]) == (3,3,3), 
                  "Loop of length three, i.e. triangle")
@@ -89,6 +140,24 @@ function is_non_sporadic_subdiagram(c::ConnectedInducedSubDiagram,D,n)
             return false
         end
 
+    elseif card(c) == 4 && (c.left_end == AFourAndThen || c.left_end == AFourAndThen)
+        # F_4 case
+        ends = Set([c.left_end,c.right_end])
+        u,v,w,z = vv[1],vv[2],vv[3],vv[4]
+        @iff(ends == Set([AFourAndThen,NoEnd]) && D[u,v] == 3 && D[v,w] == 4 && D[w,z] == 3 && D[u,w] == 2 && D[u,z] == 2 && D[v,z] == 2, "H_4")
+    
+    elseif card(c) == 4 && (c.left_end == ASingleNgeq5 || c.left_end == ASingleNgeq5)
+        # H₄ case
+        if c.left_end == ASingleNgeq5
+            @needs(c.right_end == NoEnd, "H₄")
+            return is_path(vv,D,first=(x -> x == 5))
+        elseif c.right_end == ASingleNgeq5
+            @needs(c.left_end == NoEnd, "H₄")
+            return is_path(vv,D,last=(x -> x == 5))
+        else
+            @assert false
+        end
+    
     else
         
         @assert card(c) ≥ 4
@@ -101,17 +170,28 @@ function is_non_sporadic_subdiagram(c::ConnectedInducedSubDiagram,D,n)
                || ends == Set([ASingleFour,ASimpleBranch])), "Not all end combinations are legal")
 
     
+        ## Loop is ez
         if c.left_end == ALoop && c.right_end == ALoop
-            @needs(D[1,end] == 3, 
-                   "If loop, it must close")
-            @needs(all(D[vv[i],vv[i+1]] == 3 for i in 1:card(c)-1), 
-                   "If loop, needs path")
-            @needs(all(D[vv[i],vv[j]] == 2 for i in 1:card(c)-1 for j in i+2:card(c)), 
-                   "If loop, no edge anywhere else")
-
+            @needs(is_path(vv[1:end-1],D),"start of loop is path")
+            @needs(is_path([vv[2:end]  vv[1]],D),"end of loop is path")
             return true
+        end
+
+        ##Let's do the E types
+        if c.left_end == TwoTwoBranch
+            # \tilde E₆
+            @needs(card(c) == 7, "~E₆") 
+            @needs(is_path(vv[3:]), "~E₆") 
+            @needs(is_path(vv[1:2]*vv[5:]), "~E₆") 
+            @needs(is_path(vv[1:2]*reverse(vv[3:5])), "~E₆")
+            return true
+        elseif c.left_end == TwoOneBranch
+
+        elseif c.left_end == ThreeOneBranch
 
         end
+
+
 
         start = 1
         stop = card(c)
@@ -155,14 +235,7 @@ function is_non_sporadic_subdiagram(c::ConnectedInducedSubDiagram,D,n)
             stop = card(c)
         end
        
-        for i in start:stop, j in start:stop
-            if j-i == 1 
-                @needs(D[vv[i],vv[j]] == 3, "consecutive vertices linked through simple edge")
-            end
-            if abs(j-i) ≥ 2  
-                @needs(D[vv[i],vv[j]] == 2, "non-consecutive vertices not adjacent")
-            end
-        end
+        @needs(is_path(vv[start:stop],D), "consecutive vertices linked through simple edge")
 
         return true
     end
@@ -384,7 +457,7 @@ function try_extend(VS::BitSet,S::InducedSubDiagram,D,v::Integer)
     println()
     println(joined)
     println("########## ####### ##################")
-    @assert is_non_sporadic_subdiagram(joined,D,size(D,1))
+    @assert is_subdiagram(joined,D,size(D,1))
 
     return InducedSubDiagram(Set([joined])∪Set(non_neighboring_components))
 
@@ -439,14 +512,14 @@ function test_non_sporadic_connected_diagrams()
               2 0 2 3;
               2 2 0 3;
               3 3 3 0]
-    @assert(is_non_sporadic_subdiagram(ConnectedInducedSubDiagram([1, 2, 4, 3],ASimpleBranch,NoEnd),tripod,4))
-    @assert(!is_non_sporadic_subdiagram(ConnectedInducedSubDiagram([4, 1, 2, 3],ASimpleBranch,NoEnd),tripod,4), "it's a tripod but the description is invalid")
+    @assert(is_subdiagram(ConnectedInducedSubDiagram([1, 2, 4, 3],ASimpleBranch,NoEnd),tripod,4))
+    @assert(!is_subdiagram(ConnectedInducedSubDiagram([4, 1, 2, 3],ASimpleBranch,NoEnd),tripod,4), "it's a tripod but the description is invalid")
 
     badtripod = [0 4 2 3;
               4 0 2 3;
               2 2 0 3;
               3 3 3 0]
-    @assert(!is_non_sporadic_subdiagram(ConnectedInducedSubDiagram([1, 2, 4, 3],ASimpleBranch,NoEnd),badtripod,4))
-    @assert(!is_non_sporadic_subdiagram(ConnectedInducedSubDiagram([4, 1, 2, 3],ASimpleBranch,NoEnd),badtripod,4))
+    @assert(!is_subdiagram(ConnectedInducedSubDiagram([1, 2, 4, 3],ASimpleBranch,NoEnd),badtripod,4))
+    @assert(!is_subdiagram(ConnectedInducedSubDiagram([4, 1, 2, 3],ASimpleBranch,NoEnd),badtripod,4))
 
 end
