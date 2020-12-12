@@ -56,11 +56,7 @@ function diagonalize(A)
     Q = M[1:n,n+1:2*n]
     P = Q'
    
-    println("----------------------------")
-    println()
-    display(P)
-    println()
-    println("----------------------------")
+
 
     @assert LinearAlgebra.isdiag(D) "D is diagonal", D
     @assert P'*A*P == D "We have a diagonalization"
@@ -158,7 +154,6 @@ function test_get_integer_points()
     end
 
 end
-
 
 
 #function is_necessary_hyperplane(cone_roots::Array{Array{Int,1},1},A::Array{Int,2},root::Array{Int,1})

@@ -2,6 +2,7 @@
 
 # using Plots
 using LinearAlgebra
+using AbstractAlgebra
 using Base
 
 include("util.jl")

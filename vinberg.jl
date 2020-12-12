@@ -1,6 +1,6 @@
 #using Nemo
 #using Hecke
-#using AbstractAlgebra
+using AbstractAlgebra
 using LinearAlgebra
 # using SymPy
 
@@ -51,6 +51,7 @@ end
 struct QuadLatticeElement
     L::QuadLattice
     vec::Array{BigInt,1}
+    #vec::Array{Int,1}
 end
 
 same_quad_lattice(v::QuadLatticeElement,w::QuadLatticeElement) = v.L == w.L
@@ -102,6 +103,10 @@ function is_root(v::QuadLatticeElement)
 
 end
 
+function zero_elem(L)
+    QuadLatticeElement(L,zeros(rank(L)))
+end
+
 function reflection(r::QuadLatticeElement,v::QuadLatticeElement)
    
     @assert same_quad_lattice(v,r) "The elements must belong to the same lattice"
@@ -119,6 +124,27 @@ end
 
 function vec(v::QuadLatticeElement)
     return v.vec
+end
+
+# v₀ a vector of the lattice L
+# Let V₁ the orthogonal subspace
+# x ∈ V₁ iff x'*G*v₀  == 0, i.e. x⊙v₀ == 0
+#
+# WARNING: I'm not sure the right_kernel really gives us a basis…
+#
+function basis_of_orhogonal_complement(L::QuadLattice, v0::QuadLatticeElement)
+    @assert v0.L == L
+
+    S = MatrixSpace(ZZ, 1, rank(L))
+    println("S is $S")
+    Mv0 = L.G * v0.vec
+    MMv0 = S(reduce(vcat,Mv0))
+    right_ker_rank, right_ker = right_kernel(MMv0)
+
+
+    span = [QuadLatticeElement(L,u) for u in eachcol(Matrix(right_ker))]
+    return span
+
 end
 
 # The vectors [v0 v1 … v_n] = P are orthogonal, hence linearly independent, so that they span a finite index subgroup of L.
@@ -211,9 +237,25 @@ function negative_vector(L::QuadLattice)
 
 end
 
-function roots_of_fundamental_cone(v0::QuadLatticeElement)
+function roots_of_fundamental_cone(L::QuadLattice,v0::QuadLatticeElement, V1_basis::Array{QuadLatticeElement,1})
+    
+    @assert v0.L == L
 
-    return []
+    possible_roots = [v for k in root_lengths(L) for v in roots_decomposed_into(L,v0,V1_basis,zero_elem(L),k) if is_root(v)]
+    println("possible roots are $possible_roots")
+    filter!(is_root,possible_roots)
+    println("after filtering $possible_roots")
+
+    roots = []
+    for r in possible_roots
+        if is_necessary_hyperplane(roots,L.G, r)
+            push!(roots,r)
+        end
+    end
+    
+    println("cone roots roots are now $roots")
+
+    return roots
 
 end
 
@@ -230,16 +272,33 @@ function next!(r::RootsByDistance)
 end
 
 
-function roots_decomposed_into(s,a,k)
+function roots_decomposed_into(
+    L::QuadLattice,
+    v0::QuadLatticeElement,
+    V1::Array{QuadLatticeElement,1},
+    a::QuadLatticeElement,
+    k::Integer)
     # cf eponimous function in B&P's code
+    # with added assumption that a lies in span({v₀}), which simplifies the 
+    # computations but only works for finding the cone roots
 
-    # We are looking for a root ``v = a₀v₀ + v₁ + w``
+    # We are looking for a root ``v = a + v₁``
     # satisfying 
     # * ``v⊙v = k``
-    # * ``a₀v₀ = a``
-    # * ``w`` one of the representatives of Lbis (tbdefined)
-
+    # * ``v₁∈V₁``
+    #
+    # (v₁+a)⊙(v₁+a) = v₁⊙v₁ + 2 v₁⊙a + a⊙a
+    # so
+    # (v₁+a)⊙(v₁+a) = k iff  v₁⊙v₁ + 2 v₁⊙a = k-a⊙a,
+    # and
     
+    V1Mat = reduce(hcat,[v.vec for v in V1])
+
+    solutions = qsolve(V1Mat' * L.G * V1Mat, V1Mat' * L.G * a.vec, a⊙a - k)
+
+    solutions_in_L = (x -> QuadLatticeElement(L,V1Mat * x + a)).(solutions)
+    
+    return solutions_in_L
 
 end
 
@@ -249,16 +308,28 @@ function is_finite_volume(roots::Array{QuadLatticeElement,(1)})
 end
 
 function Vinberg_Algorithm(G)
+    
+    println("(n,1) form matrix: ")
+    display(G)
+    println()
+    println("-------------------")
 
-
-    L = QuadLattice(G)
+    L = QuadLattice(G)
 
     # We first start with just one point of the fundamental domain.
     v0 = negative_vector(L)
-   
+
+    println("negative norm vector v₀")
+    display(v0.vec)
+    println()
+    println("-------------------")
+
+    V1 = basis_of_orhogonal_complement(L,v0)
+
+
     roots::Array{QuadLatticeElement,(1)} = []
 
-    append!(roots, roots_of_fundamental_cone(v0))
+    append!(roots, roots_of_fundamental_cone(L,v0,V1))
 
 
 #    while ! is_finite_volume(roots)
@@ -271,10 +342,10 @@ function Vinberg_Algorithm(G)
 end
 
 
-G0 = [-3 0 0 0;
-       0 1 0 0;
+G0 = [-3 0 0 0;
+       0 1 0 0;
        0 0 1 0;
-       0 0 0 2;
+       0 0 0 2;
      ]
 
 G1= [-10 0  0 0; 
@@ -285,9 +356,6 @@ G2 = [-7 0   0 0;
       0 2 -1 0; 
       0 -1 2 -1; 
       0 0 -1 2]
-G = [1 2 3; 
-     2 3 4; 
-     3 4 5]
 
 
 
