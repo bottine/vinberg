@@ -1,21 +1,46 @@
-
+using MLStyle
 
 # Referring to https://en.wikipedia.org/wiki/Coxeter%E2%80%93Dynkin_diagram#Application_with_uniform_polytopes
 # These are the different isomorphism types of subdiagrams of spherical/affine Coxeter-Dynkin diagrams
-
+@enum DiagramType begin
+    # Lowercase == Spherical
+    DT_a
+    DT_b # == C 
+    DT_d
+    DT_e6
+    DT_e7
+    DT_e8
+    DT_f4
+    DT_g2
+    DT_h2
+    DT_i
+    DT_h3
+    DT_h4
+    DT_# Uppercase == Affine
+    DT_A
+    DT_B
+    DT_C
+    DT_D
+    DT_E6
+    DT_E7
+    DT_E8
+    DT_F4
+    DT_G2
+    DT_I
+end
 
 @enum EndType begin
-    ASimpleBranch
-    ASingleFour
-    ALoop
-    NoEnd
+    NoEnd = 0
+    ASimpleBranch = 1
+    ASingleFour = 2
+    ALoop = 3
     # Above are the only ones needed for non sporadic
-    TwoOneBranch    # Needed for E types
-    TwoTwoBranch    # Needed for E types
-    ThreeOneBranch  # Needed for E types
-    ASingleNgeq5    
-    ASingleInfty
-    AFourAndThen    # Needed for F_4
+    TwoOneBranch = 4    # Needed for E types
+    TwoTwoBranch = 5   # Needed for E types
+    ThreeOneBranch = 6 # Needed for E types
+    ASingleNgeq5  = 7  
+    ASingleInfty = 8
+    AFourAndThen = 9   # Needed for F_4
 
 end
 
@@ -51,6 +76,17 @@ macro iff(condition, comment)
     end
 end
 
+function are_pairwise_disconnected(VV,D) 
+    for vv in VV, ww in VV if vv ≠ ww
+        for v in vv, w in ww
+            if v == w || D[v,w] ≠ 2
+                return false
+            end
+        end
+    end end
+    return true
+end
+
 
 function is_path(vv,D,first=(x -> x == 3),last=(x -> x == 3))
     n = length(vv)
@@ -78,168 +114,97 @@ function is_path(vv,D,first=(x -> x == 3),last=(x -> x == 3))
     return true
 end
 
-function is_subdiagram(c::ConnectedInducedSubDiagram,D,n)
-    # D is the Coxeter matrix
-    # c the subdiagram
-    #
+function reindex(vv,along...)
+    reduce(vcat,[vv[a] for a in along])
+end
+
+function drop_slice(vv,from,to) 
+    return vcat( vv[1:from-1],  vv[to+1:end])
+end
+
+function is_subdiagram2(c::ConnectedInducedSubDiagram,D,n)
     @assert size(D) == (n,n)
     @assert D == D'
-    vv = c.vertices
-    
-    println(all(v ≥ 1 && v ≤ n for v in vv))
-    @needs(all(v ≥ 1 && v ≤ n for v in vv), "Elements of c must all be vertices")
 
-    @needs(length(vv) == length(Set(vv)), "All vertices must appear exactly once")
-    
-    if card(c) == 0
-    
-        return true, "empty"
-    
-    elseif card(c) == 1
-        
-        return true, "singleton"
-    
-    elseif card(c) == 2
-        
-        u = vv[1]
-        v = vv[2]
-
-        if D[u,v] == 3
-            return true, "simple edge"
-        elseif D[u,v] == 4
-            return true, "simple four edge"
-        elseif D[u,v] == -1 # -1 == ∞
-            return true, "simple ∞ edge"
-        elseif D[u,v] ≥ 5
-            return true, "simple n≥5 edge"
-        else
-            return false
-        end
-
-    
-
-    elseif card(c) == 3
-        if c.left_end == NoEnd && c.right_end == NoEnd
-            return is_path(vv,D)
-        elseif c.left_end == NoEnd && c.right_end == ASingleFour 
-            return is_path(vv,D,last=(x->x==4))
-        elseif c.left_end == ASingleFour && c.right_end == NoEnd 
-            return is_path(vv,D,first=(x->x==4))
-        elseif c.left_end == NoEnd && c.right_end == ASingleInfty 
-            return is_path(vv,D,last=(x->x==-1))
-        elseif c.left_end == ASingleInfty && c.right_end == NoEnd 
-            return is_path(vv,D,first=(x->x==-1))
-        elseif c.left_end == NoEnd && c.right_end == ASingleNgeq5
-            return is_path(vv,D,last=(x->x∈Set([5,6])))
-        elseif c.left_end == ASingleNgeq5 && c.right_end == NoEnd 
-            return is_path(vv,D,first=(x->x∈Set([5,6])))
-        elseif c.left_end == ALoop && c.right_end == ALoop 
-            @iff((D[vv[1],vv[2]], D[vv[2],vv[3]],D[vv[1],vv[3]]) == (3,3,3), 
-                 "Loop of length three, i.e. triangle")
-        else
-            return false
-        end
-
-    elseif card(c) == 4 && (c.left_end == AFourAndThen || c.left_end == AFourAndThen)
-        # F_4 case
-        ends = Set([c.left_end,c.right_end])
-        u,v,w,z = vv[1],vv[2],vv[3],vv[4]
-        @iff(ends == Set([AFourAndThen,NoEnd]) && D[u,v] == 3 && D[v,w] == 4 && D[w,z] == 3 && D[u,w] == 2 && D[u,z] == 2 && D[v,z] == 2, "H_4")
-    
-    elseif card(c) == 4 && (c.left_end == ASingleNgeq5 || c.left_end == ASingleNgeq5)
-        # H₄ case
-        if c.left_end == ASingleNgeq5
-            @needs(c.right_end == NoEnd, "H₄")
-            return is_path(vv,D,first=(x -> x == 5))
-        elseif c.right_end == ASingleNgeq5
-            @needs(c.left_end == NoEnd, "H₄")
-            return is_path(vv,D,last=(x -> x == 5))
-        else
-            @assert false
-        end
-    
-    else
-        
-        @assert card(c) ≥ 4
-
-        #forbidden end configurations
-        ends = Set([c.left_end,c.right_end])
-
-        @needs(!(ends == Set([ASingleFour]) 
-               || (length(ends) == 2 && ALoop ∈ ends) 
-               || ends == Set([ASingleFour,ASimpleBranch])), "Not all end combinations are legal")
-
-    
-        ## Loop is ez
-        if c.left_end == ALoop && c.right_end == ALoop
-            @needs(is_path(vv[1:end-1],D),"start of loop is path")
-            @needs(is_path([vv[2:end]  vv[1]],D),"end of loop is path")
-            return true
-        end
-
-        ##Let's do the E types
-        if c.left_end == TwoTwoBranch
-            # \tilde E₆
-            @needs(card(c) == 7, "~E₆") 
-            @needs(is_path(vv[3:]), "~E₆") 
-            @needs(is_path(vv[1:2]*vv[5:]), "~E₆") 
-            @needs(is_path(vv[1:2]*reverse(vv[3:5])), "~E₆")
-            return true
-        elseif c.left_end == TwoOneBranch
-
-        elseif c.left_end == ThreeOneBranch
-
-        end
-
-
-
-        start = 1
-        stop = card(c)
-
-        if c.left_end == ASingleFour 
-            @needs(D[vv[1],vv[2]] == 4,
-                   "Left end is *-4-*")
-            start = 2
-            @needs(all(D[vv[1],vv[i]] == 2 for i in start+1:card(c)),
-                  "No connection between leftmost vertex and all others")
-
-        elseif c.left_end == ASimpleBranch
-            @needs(D[vv[1],vv[2]] == 2 && D[vv[1],vv[3]] == 3 && D[vv[2],vv[3]] == 3,
-                   "Left end is :>*, i.e. a branch")
-            
-            start = 3
-            println([(D[vv[2],vv[i]],D[vv[1],vv[i]])  for i in start+1:card(c)])
-            @needs(all((D[vv[2],vv[i]],D[vv[1],vv[i]]) == (2,2) for i in start+1:card(c)),
-                  "No connection between leftmost vertices and all others")
-
-        elseif c.left_end == NoEnd
-            start = 1
-        end 
-        
-        if c.right_end == ASingleFour
-            @needs(D[vv[end],vv[end-1]] == 4,
-                   "Right end is *-4-*")
-            
-            stop = card(c) - 1
-            @needs(all(D[vv[end],vv[i]] == 2 for i in 1:stop-1),
-                  "No connection between rightmost vertex and all others")
-        elseif c.right_end == ASimpleBranch
-            @needs(D[vv[end],vv[end-1]] == 2 && D[vv[end],vv[end-2]] == 3 && D[vv[end-1],vv[end-2]] == 3,
-                   "Right end is :>*, i.e. a branch")
-            
-            stop = card(c) - 2
-            @needs(all((D[vv[end-1],vv[i]],D[vv[end],vv[i]]) == (2,2) for i in 1:stop-1),
-                  "No connection between rightmost vertices and all others")
-
-        elseif c.right_end == NoEnd
-            stop = card(c)
-        end
-       
-        @needs(is_path(vv[start:stop],D), "consecutive vertices linked through simple edge")
-
-        return true
+    # canonical "orientation" so that we can always assume the left end is the "lower" one (arbitrary order)
+    if c.left_end > c.right_end  
+        c = ConnectedInducedSubDiagram(reverse(c.vertices),c.right_end,c.left_end)
     end
+    
 
+
+    l = c.left_end
+    r = c.right_end
+
+    vv = c.vertices
+    card = length(vv)
+
+    return begin
+        if false
+            # Welcome to the poor person's pattern matching
+        elseif (l,r) == (NoEnd,NoEnd) && card ≤ 3 && is_path(vv,D) 
+            (true, Nothing)
+        elseif (l,r) == (NoEnd,NoEnd) && card ≥ 4 && is_path(vv,D) 
+            (true, DT_a)
+        elseif (l,r) == (NoEnd,ASingleFour) && card ≤ 3 && is_path(vv,D,last=(x -> x == 4)) 
+            (true, Nothing)
+        elseif (l,r) == (NoEnd,ASingleFour) && card ≥ 4 && is_path(vv,D,last=(x -> x == 4)) 
+            (true, DT_b)
+        elseif (l,r) == (NoEnd, ASimpleBranch) && card ≤ 4 && is_path(drop_slice(vv,card,card),D) && is_path(drop_slice(vv,card-1,card-1),D) && D[vv[end-1],vv[end]] == 2  
+            (true, Nothing)
+        elseif (l,r) == (NoEnd, ASimpleBranch)  && card ≥ 5 && is_path(drop_slice(vv,card,card),D) && is_path(drop_slice(vv,card-1,card-1),D) && D[vv[end-1],vv[end]] == 2  
+            (true, DT_d)
+        elseif (l,r) == (NoEnd, ASingleInfty) && card == 2
+            (true, DT_I)
+        elseif (l,r) == (NoEnd, ASingleNgeq5) && card == 2 && D[vv[1],vv[2]] == 5
+            (true, DT_h2)
+        elseif (l,r) == (NoEnd, ASingleNgeq5) && card == 2 && D[vv[1],vv[2]] == 6
+            (true, DT_g2)
+        elseif (l,r) == (NoEnd, ASingleNgeq5) && card == 2 && D[vv[1],vv[2]] ≥ 7
+            (true, DT_i)
+        elseif (l,r) == (NoEnd, ASingleNgeq5) && card == 3 && D[vv[2],vv[3]] == 5 && is_path(vv, D, last=(x -> x == 5))
+            (true, DT_h3)
+        elseif (l,r) == (NoEnd, ASingleNgeq5) && card == 4 && D[vv[3],vv[4]] == 5 && is_path(vv, D, last=(x -> x == 5))
+            (true, DT_h4)
+        elseif (l,r) == (NoEnd, ASingleNgeq5) && card == 3 && D[vv[2],vv[3]] == 6 && is_path(vv, D, last=(x -> x == 6))
+            (true, DT_G2)
+        elseif (l,r) == (NoEnd, AFourAndThen) && card == 3 && is_path(vv,first=(x -> x == 4))
+            (true, Nothing)
+        elseif (l,r) == (NoEnd, AFourAndThen) && card == 4 && is_path(vv[1:end-1],last=(x-> x == 4)) && is_path(vv[2:end],first=(x-> x == 4)) && are_pairwise_disconnected([vv[1:2],vv[4:4]]) 
+            (true, DT_f4)
+        elseif (l,r) == (NoEnd, AFourAndThen) && card == 5 && is_path(vv[1:end-1],last=(x-> x == 4)) && is_path(vv[end-1:end],first=(x-> x == 4)) && are_pairwise_disconnected([vv[1:3],vv[5:5]]) # TODO needs more
+            (true, DT_F4)
+        elseif (l,r) == (ASimpleBranch, ASingleFour) && card ≥ 5 && is_path(drop_slice(vv,2,2),D,last=(x -> x == 4)) && is_path(drop_slice(vv,1,1),D,last=(x -> x == 4)) && D[vv[1],vv[2]] == 2
+            (true, DT_B)
+        elseif (l,r) == (ASimpleBranch, ASingleFour) && card ≥ 7 && is_path(vv[2:end-1],D) && are_pairwise_disconnected([vv[3,end-2],vv[1:1],vv[2:2],vv[end-1:end-1],vv[end:end]])
+            (true, DT_D)
+        elseif (l,r) == (ASingleFour, ASingleFour) && card ≥ 5 && is_path(vv,D,first=(x->x==4),last=(x->x==4))
+            (true, DT_C)
+        elseif (l,r) == (ALoop, ALoop) && card ≥ 3 && is_path(vv[1:end-1]) && is_path(vcat(vv[2:end], [vv[1]])) 
+            (true, DT_F4)
+        elseif (l,r) == (NoEnd, TwoOneBranch) && card == 5 && is_path(reindex(vv,1:2,4:5),D) && is_path(vv[3:5],D) && is_path(reindex(vv,1:2,4:-1:3))
+            (true, Nothing) # a piece of an E diagram
+        elseif (l,r) == (NoEnd, TwoOneBranch) && card == 6 && is_path(drop_slice(vv,3,3),D) && is_path(vv[3:end],D) && is_path(reindex(vv,1:2,4:-1:3))
+            (true, DT_e6)
+        elseif (l,r) == (NoEnd, TwoOneBranch) && card == 7 && is_path(drop_slice(vv,3,3),D) && is_path(vv[3:end],D) && is_path(reindex(vv,1:2,4:-1:3))
+            (true, DT_e7)
+        elseif (l,r) == (NoEnd, TwoOneBranch) && card == 8 && is_path(drop_slice(vv,3,3),D) && is_path(vv[3:end],D) && is_path(reindex(vv,1:2,4:-1:3))
+            (true, DT_e8)
+        elseif (l,r) == (NoEnd, TwoOneBranch) && card == 9 && is_path(drop_slice(vv,3,3),D) && is_path(vv[3:end],D) && is_path(reindex(vv,1:2,4:-1:3))
+            (true, DT_E8)
+        elseif (l,r) == (NoEnd, TwoTwoBranch) && card == 6 && is_path(drop_slice(vv,3,4),D) && is_path(vv[3:end],D) && is_path(reindex(vv,1:2,5:-1:3))
+            (true, Nothing) # A piece of E6
+        elseif (l,r) == (NoEnd, TwoTwoBranch) && card == 7 && is_path(drop_slice(vv,3,4),D) && is_path(vv[3:end],D) && is_path(reindex(vv,1:2,5:-1:3))
+            (true, DT_E6)
+        elseif (l,r) == (NoEnd, ThreeOneBranch) && card == 8 && is_path(drop_slice(vv,4,4),D) && is_path(vv[4:end],D) && is_path(reindex(vv,1:3,5:-1:4))
+            (true, DT_E7)
+        else 
+            (false, "oh boy")
+        end
+
+
+    end
+    
 end
 
 
@@ -458,6 +423,7 @@ function try_extend(VS::BitSet,S::InducedSubDiagram,D,v::Integer)
     println(joined)
     println("########## ####### ##################")
     @assert is_subdiagram(joined,D,size(D,1))
+    @assert is_subdiagram2(joined,D,size(D,1))
 
     return InducedSubDiagram(Set([joined])∪Set(non_neighboring_components))
 
@@ -512,8 +478,8 @@ function test_non_sporadic_connected_diagrams()
               2 0 2 3;
               2 2 0 3;
               3 3 3 0]
-    @assert(is_subdiagram(ConnectedInducedSubDiagram([1, 2, 4, 3],ASimpleBranch,NoEnd),tripod,4))
-    @assert(!is_subdiagram(ConnectedInducedSubDiagram([4, 1, 2, 3],ASimpleBranch,NoEnd),tripod,4), "it's a tripod but the description is invalid")
+    @assert(is_subdiagram2(ConnectedInducedSubDiagram([1, 2, 4, 3],ASimpleBranch,NoEnd),tripod,4)[1])
+    @assert(!is_subdiagram2(ConnectedInducedSubDiagram([4, 1, 2, 3],ASimpleBranch,NoEnd),tripod,4)[1], "it's a tripod but the description is invalid")
 
     badtripod = [0 4 2 3;
               4 0 2 3;
