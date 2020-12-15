@@ -1,4 +1,7 @@
 using MLStyle
+using LightGraphs
+using GraphPlot
+using Colors
 
 # Referring to https://en.wikipedia.org/wiki/Coxeter%E2%80%93Dynkin_diagram#Application_with_uniform_polytopes
 # These are the different isomorphism types of subdiagrams of spherical/affine Coxeter-Dynkin diagrams
@@ -29,6 +32,9 @@ using MLStyle
     DT_I
 end
 
+is_spherical(dt::DiagramType) = dt ∈ Set([DT_a,DT_b,DT_d,DT_e6,DT_e7,DT_e8,DT_f4,DT_g2,DT_h2,DT_i])
+is_affine(dt::DiagramType) = dt ∈ Set([DT_A,DT_B,DT_C,DT_D,DT_E6,DT_E7,DT_E8,DT_F4,DT_G2,DT_I])
+
 @enum EndType begin
     NoEnd = 0
     ASimpleBranch = 1
@@ -44,37 +50,52 @@ end
 
 end
 
+
 struct ConnectedInducedSubDiagram
     vertices::Array{Int,(1)}
     left_end::EndType
     right_end::EndType
+    type::DiagramType 
 end
+
+#function draw(c::ConnectedInducedDiagram,D,color="black")
+#    nodefillc = [v∈c.vertices ? "black" : "grey" for v in 1:n]
+#    edgelabel = []
+#    g = SimpleGraph()
+#    for i in 1:n
+#        add_vertex!(g,i) 
+#        for j in 1:i-1
+#            if D[i,j] ≠ 2
+#                g.add_edge!(g,i,j)
+#                push!(edgelabel,D[i,j])
+#        end
+#    end
+#    draw(PDF("./$D/$c.pdf", 16cm, 16cm), gplot(g,edgelabel=edgelabel,nodelabel=nodelabel,nodefillc=nodefillc))
+#end
+#
+#
+#function draw(c:InducedSubDiagram,D)
+#    
+#    n = size(D,1)
+#    @assert size(D) == (n,n) && D = D'
+#
+#    nodelabel = [1:n]
+#
+#    g = SimpleGraph()
+#    for i in 1:n
+#        add_vertex!(g,i) 
+#        for j in 1:i-1
+#            if D[i,j] ≠ 2
+#                g.add_edge!(g,i,j)
+#                push!(edgelabel,D[i,j])
+#        end
+#    end
+#
+#    nodefillc = distinguishable_colors(length(c.connected_components), colorant"blue")
+#
+#end
 
 card(c::ConnectedInducedSubDiagram) = length(c.vertices)
-
-macro needs(condition, comment)
-    return quote 
-        if ! $(esc(condition))
-            if $(esc(comment)) ≠ Nothing
-                println($(esc(comment)))
-            end
-            return false
-        end
-    end
-end
-
-macro iff(condition, comment)
-    return quote 
-        if $(esc(comment)) ≠ Nothing
-            println($(esc(comment)))
-        end
-        if $(esc(condition))
-            return true
-        else
-            return false
-        end
-    end
-end
 
 function are_pairwise_disconnected(VV,D) 
     for vv in VV, ww in VV if vv ≠ ww
@@ -88,7 +109,7 @@ function are_pairwise_disconnected(VV,D)
 end
 
 
-function is_path(vv,D,first=(x -> x == 3),last=(x -> x == 3))
+function is_path(vv,D,first=(x -> x == 3),last=(x -> x == 3),middle=(val,idx -> val==3))
     n = length(vv)
     for i in 1:n, j in i+1:n
         if i == 1 && j == 2
@@ -100,7 +121,7 @@ function is_path(vv,D,first=(x -> x == 3),last=(x -> x == 3))
                 return false
             end
         elseif j == i+1
-            if D[vv[i],vv[j]] ≠ 3
+            if !middle(D[vv[i],vv[j],i])##D[vv[i],vv[j]] ≠ 3
                 return false
             end
         elseif j > i+1
@@ -119,10 +140,10 @@ function reindex(vv,along...)
 end
 
 function drop_slice(vv,from,to) 
-    return vcat( vv[1:from-1],  vv[to+1:end])
+    return reindex(vv,1:from-1,to+1:length(vv))
 end
 
-function is_subdiagram2(c::ConnectedInducedSubDiagram,D,n)
+function is_subdiagram(c::ConnectedInducedSubDiagram,D,n)
     @assert size(D) == (n,n)
     @assert D == D'
 
@@ -130,8 +151,6 @@ function is_subdiagram2(c::ConnectedInducedSubDiagram,D,n)
     if c.left_end > c.right_end  
         c = ConnectedInducedSubDiagram(reverse(c.vertices),c.right_end,c.left_end)
     end
-    
-
 
     l = c.left_end
     r = c.right_end
@@ -142,17 +161,12 @@ function is_subdiagram2(c::ConnectedInducedSubDiagram,D,n)
     return begin
         if false
             # Welcome to the poor person's pattern matching
-        elseif (l,r) == (NoEnd,NoEnd) && card ≤ 3 && is_path(vv,D) 
-            (true, Nothing)
-        elseif (l,r) == (NoEnd,NoEnd) && card ≥ 4 && is_path(vv,D) 
+            @assert false "unreachable"
+        elseif (l,r) == (NoEnd,NoEnd) && is_path(vv,D) 
             (true, DT_a)
-        elseif (l,r) == (NoEnd,ASingleFour) && card ≤ 3 && is_path(vv,D,last=(x -> x == 4)) 
-            (true, Nothing)
-        elseif (l,r) == (NoEnd,ASingleFour) && card ≥ 4 && is_path(vv,D,last=(x -> x == 4)) 
+        elseif (l,r) == (NoEnd,ASingleFour) && card ≥ 2 && is_path(vv,D,last=(x -> x == 4)) 
             (true, DT_b)
-        elseif (l,r) == (NoEnd, ASimpleBranch) && card ≤ 4 && is_path(drop_slice(vv,card,card),D) && is_path(drop_slice(vv,card-1,card-1),D) && D[vv[end-1],vv[end]] == 2  
-            (true, Nothing)
-        elseif (l,r) == (NoEnd, ASimpleBranch)  && card ≥ 5 && is_path(drop_slice(vv,card,card),D) && is_path(drop_slice(vv,card-1,card-1),D) && D[vv[end-1],vv[end]] == 2  
+        elseif (l,r) == (NoEnd, ASimpleBranch) && card ≥ 4 && is_path(drop_slice(vv,card,card),D) && is_path(drop_slice(vv,card-1,card-1),D) && D[vv[end-1],vv[end]] == 2  
             (true, DT_d)
         elseif (l,r) == (NoEnd, ASingleInfty) && card == 2
             (true, DT_I)
@@ -168,8 +182,6 @@ function is_subdiagram2(c::ConnectedInducedSubDiagram,D,n)
             (true, DT_h4)
         elseif (l,r) == (NoEnd, ASingleNgeq5) && card == 3 && D[vv[2],vv[3]] == 6 && is_path(vv, D, last=(x -> x == 6))
             (true, DT_G2)
-        elseif (l,r) == (NoEnd, AFourAndThen) && card == 3 && is_path(vv,first=(x -> x == 4))
-            (true, Nothing)
         elseif (l,r) == (NoEnd, AFourAndThen) && card == 4 && is_path(vv[1:end-1],last=(x-> x == 4)) && is_path(vv[2:end],first=(x-> x == 4)) && are_pairwise_disconnected([vv[1:2],vv[4:4]]) 
             (true, DT_f4)
         elseif (l,r) == (NoEnd, AFourAndThen) && card == 5 && is_path(vv[1:end-1],last=(x-> x == 4)) && is_path(vv[end-1:end],first=(x-> x == 4)) && are_pairwise_disconnected([vv[1:3],vv[5:5]]) # TODO needs more
@@ -182,8 +194,6 @@ function is_subdiagram2(c::ConnectedInducedSubDiagram,D,n)
             (true, DT_C)
         elseif (l,r) == (ALoop, ALoop) && card ≥ 3 && is_path(vv[1:end-1]) && is_path(vcat(vv[2:end], [vv[1]])) 
             (true, DT_F4)
-        elseif (l,r) == (NoEnd, TwoOneBranch) && card == 5 && is_path(reindex(vv,1:2,4:5),D) && is_path(vv[3:5],D) && is_path(reindex(vv,1:2,4:-1:3))
-            (true, Nothing) # a piece of an E diagram
         elseif (l,r) == (NoEnd, TwoOneBranch) && card == 6 && is_path(drop_slice(vv,3,3),D) && is_path(vv[3:end],D) && is_path(reindex(vv,1:2,4:-1:3))
             (true, DT_e6)
         elseif (l,r) == (NoEnd, TwoOneBranch) && card == 7 && is_path(drop_slice(vv,3,3),D) && is_path(vv[3:end],D) && is_path(reindex(vv,1:2,4:-1:3))
@@ -192,8 +202,6 @@ function is_subdiagram2(c::ConnectedInducedSubDiagram,D,n)
             (true, DT_e8)
         elseif (l,r) == (NoEnd, TwoOneBranch) && card == 9 && is_path(drop_slice(vv,3,3),D) && is_path(vv[3:end],D) && is_path(reindex(vv,1:2,4:-1:3))
             (true, DT_E8)
-        elseif (l,r) == (NoEnd, TwoTwoBranch) && card == 6 && is_path(drop_slice(vv,3,4),D) && is_path(vv[3:end],D) && is_path(reindex(vv,1:2,5:-1:3))
-            (true, Nothing) # A piece of E6
         elseif (l,r) == (NoEnd, TwoTwoBranch) && card == 7 && is_path(drop_slice(vv,3,4),D) && is_path(vv[3:end],D) && is_path(reindex(vv,1:2,5:-1:3))
             (true, DT_E6)
         elseif (l,r) == (NoEnd, ThreeOneBranch) && card == 8 && is_path(drop_slice(vv,4,4),D) && is_path(vv[4:end],D) && is_path(reindex(vv,1:3,5:-1:4))
@@ -230,12 +238,227 @@ end
 
 struct DiagramAndSubs 
     D::Array{Int,(2)}
-    subs::Dict{BitSet,InducedSubDiagram}
+    subs::Dict{BitSet,(InducedSubDiagram)}
 end
 
+function is_finite_volume(dag,dim)
+    # Has spherical/parabolic diagram of rank n-1
+    n = dim-1
+    has_spherical_sub_of_rank_n = false
+    has_affine_sub_of_rank_n_minus_1 = false
+
+    subs = dag.subs
+
+    for (support, subdiagram) in subs
+        
+        if length(support) == n && is_spherical(subdiagram.type)
+            has_spherical_sub_of_rank_n = true
+        end
+        if length(support) == n && is_affine(subdiagram.type)
+            has_affine_sub_of_rank_n_minus_1 = true
+        end
+
+        if length(support) == n-1 && is_spherical(subdiagram.type)
+            extensions = [
+                ext_support for (ext_support, ext_subdiagram) in subs if 
+                support < ext_support && 
+                (
+                    ( length(ext_support) == n && is_spherical(ext_subdiagram.type) ) || 
+                    ( length(ext_support) == n && is_affine(ext_subdiagram.type) ) 
+
+                ) 
+            ]
+            if length(extensions) ≠ 2
+                return false
+            end
+        end
+    
+    end
+
+    return has_affine_sub_of_rank_n_minus_1 || has_spherical_sub_of_rank_n
+
+end
+
+e6_matrix = 
 
 empty(S1::ConnectedInducedSubDiagram) = length(S1.vertices) == 0
 singleton(v::Integer) = ConnectedInducedSubDiagram([v],NoEnd,NoEnd)
+
+function small_diagram_type(VS::BitSet,D)
+    @assert length(VS) ≤ 9 "only small diagrams"
+    VS = Array(VS)
+    
+    if length(VS) == 2 && D[VS[1],VS[2]] == 3
+        return ConnectedInducedSubDiagram(VS,NoEnd,NoEnd,DT_a)
+    elseif length(VS) == 2 && D[VS[1],VS[2]] == 4
+        return ConnectedInducedSubDiagram(VS,NoEnd,ASingleFour,DT_b)
+    elseif length(VS) == 2 && D[VS[1],VS[2]] == 5
+        return ConnectedInducedSubDiagram(VS,NoEnd,ASingleNgeq5,DT_h2)
+    elseif length(VS) == 2 && D[VS[1],VS[2]] == 6
+        return ConnectedInducedSubDiagram(VS,NoEnd,ASingleNgeq5,DT_g2)
+    elseif length(VS) == 2 && D[VS[1],VS[2]] ≥ 7
+        return ConnectedInducedSubDiagram(VS,NoEnd,ASingleNgeq5,DT_i)
+    elseif length(VS) == 2 && D[VS[1],VS[2]] ≥ -1
+        return ConnectedInducedSubDiagram(VS,NoEnd,ASingleNgeq5,DT_I)
+    end
+    
+    if any(D[u,v] == 4 for u in VS for v in VS if u ≠ v)
+        # f4 or F4 or bn or Bn or Cn
+    end
+
+    if any(D[u,v] == 5 for u in VS for v in VS if u ≠ v)
+        # H3 or H4
+    end
+    
+    if any(D[u,v] == 6 for u in VS for v in VS if u ≠ v)
+        # G2
+    end
+
+    
+
+    
+
+end
+
+function try_extend3(VS::BitSet,S::InducedSubDiagram,D,v::Integer)
+
+    components = S.connected_components
+    
+    # joined should/will be of type ConnectedInducedSubDiagram
+    joined = Nothing # Here is the result
+    
+    # special case, no component in S, so we just return the singleton
+    if length(components) == 0
+        joined = singleton(v)
+        return InducedSubDiagram(Set([joined]))
+    end
+    
+
+    # list of components, corresponding adjacencent vertices 
+    neighbors_v = Set([u for u in eachindex(D[v,:]) if u≠v && u in VS && D[v,u]≠2])
+    neighbors_v_labels = [D[u,v] for u in neighbors_v] 
+    non_neighboring_components = []
+    neighboring_components = []
+    neighboring_components_vertices = []
+    neighboring_components_vertices_labels = []
+    for c in components
+        neighbors_in_c = [u for u in c.vertices if u in neighbors_v]
+        if length(neighbors_in_c) > 0
+            push!(neighboring_components,c)
+            push!(neighboring_components_vertices,neighbors_in_c)
+            push!(neighboring_components_vertices_labels,[D[u,v] for u in neighbors_in_c])
+        else
+            push!(non_neighboring_components,c)
+        end
+    end
+   
+    # TODO sort by size of connected components, and then by edge labels
+
+    nv = neighbors_v 
+    nc = neighboring_components
+    nct = neighboring_components_types
+    ncv = neighboring_components_vertices
+    ncs = neighboring_components_sizes
+    ncvl = neighboring_components_vertices_labels
+
+    only_simple_edges =  all(l == 3 for l in neighbors_v_labels)
+
+    if false
+        @assert false "unreachable"
+    elseif sum(ncs) + 1 ≤ 9 # all sporadic subgraphs covered here 
+        joined = small_diagram_type(reduce(∪,[c.vertices for c in nc],D) ∪ BitSet([v]))
+    elseif ncs == [ncs[1],1,1] && nct == [DT_a,DT_a,DT_a] && ncvl == [3,3,3] && nct == [NoEnd,NoEnd,NoEnd]
+        # d
+    elseif ncs == [ncs[1],1,1] && nct == [DT_b,DT_a,DT_a] && ncvl == [3,3,3] && nct == [NoEnd,NoEnd,NoEnd]
+        # B
+    elseif ncs == [ncs[1],1,1] && nct == [DT_d,DT_a,DT_a] && ncvl == [3,3,3] && nct == [NoEnd,NoEnd,NoEnd]
+        # D
+    elseif ncs == [ncs[1]] && nct == [DT_a] && ncvl == [3,3] && nct == [NoEnd,NoEnd]
+        # A
+        
+
+    
+    end
+
+
+end
+
+function try_extend2(VS::BitSet,S::InducedSubDiagram,D,v::Integer)
+    
+    components = S.connected_components
+    
+    # joined should/will be of type ConnectedInducedSubDiagram
+    joined = Nothing # Here is the result
+    
+    # special case, no component in S, so we just return the singleton
+    if length(components) == 0
+        joined = singleton(v)
+        return InducedSubDiagram(Set([joined]))
+    end
+    
+
+    # list of components, corresponding adjacencent vertices 
+    neighbors_v = Set([u for u in eachindex(D[v,:]) if u≠v && u in VS && D[v,u]≠2])
+    neighbors_v_labels = [D[u,v] for u in neighbors_v] 
+    non_neighboring_components = []
+    neighboring_components = []
+    neighboring_components_vertices = []
+    neighboring_components_vertices_labels = []
+    for c in components
+        neighbors_in_c = [u for u in c.vertices if u in neighbors_v]
+        if length(neighbors_in_c) > 0
+            push!(neighboring_components,c)
+            push!(neighboring_components_vertices,neighbors_in_c)
+            push!(neighboring_components_vertices_labels,[D[u,v] for u in neighbors_in_c])
+        else
+            push!(non_neighboring_components,c)
+        end
+    end
+   
+    # TODO sort by size of connected components, and then by edge labels
+
+    nv = neighbors_v 
+    nc = neighboring_components
+    nct = neighboring_components_types
+    ncv = neighboring_components_vertices
+    ncs = neighboring_components_sizes
+    ncvl = neighboring_components_vertices_labels
+
+    only_simple_edges =  all(l == 3 for l in neighbors_v_labels)
+
+    if false
+        @assert false "unreachable"
+    elseif ncs == [2,2,1] && nct == [DT_a,DT_a,DT_a] && ncvl == [3,3,3]
+        # e6
+    elseif ncs == [3,2,1] && nct == [DT_a,DT_a,DT_a] && ncvl == [3,3,3] && nct == [NoEnd,NoEnd,NoEnd]
+        # e7
+    elseif ncs == [4,2,1] && nct == [DT_a,DT_a,DT_a] && ncvl == [3,3,3] && nct == [NoEnd,NoEnd,NoEnd]
+        # e8
+    elseif ncs == [2,2,2] && nct == [DT_a,DT_a,DT_a] && ncvl == [3,3,3] && nct == [NoEnd,NoEnd,NoEnd]
+        # E6
+    elseif ncs == [3,3,1] && nct == [DT_a,DT_a,DT_a] && ncvl == [3,3,3] && nct == [NoEnd,NoEnd,NoEnd]
+        # E7
+    elseif ncs == [5,2,1] && nct == [DT_a,DT_a,DT_a] && ncvl == [3,3,3] && nct == [NoEnd,NoEnd,NoEnd]
+        # E8
+    elseif ncs == [ncs[1],1,1] && nct == [DT_a,DT_a,DT_a] && ncvl == [3,3,3] && nct == [NoEnd,NoEnd,NoEnd]
+        # d
+    elseif ncs == [1,1,1] && nct == [DT_a,DT_a,DT_a] && ncvl == [4,3,3] && nct == [NoEnd,NoEnd,NoEnd]
+        # B4
+    elseif ncs == [ncs[1],1,1] && nct == [DT_b,DT_a,DT_a] && ncvl == [3,3,3] && nct == [NoEnd,NoEnd,NoEnd]
+        # B
+    elseif ncs == [ncs[1]] && nct == [DT_a] && ncvl == [3] && nct == [NoEnd]
+        # a
+    elseif ncs == [ncs[1]] && nct == [DT_a] && ncvl == [3,3] && nct == [NoEnd,NoEnd]
+        # A
+    elseif ncs == [ncs[1]] && nct == [DT_a] && ncvl == [3] && (nct == [2] || nct == [-2])
+        # e6, e7, e8 or E8
+    elseif ncs == [ncs[1]] && nct == [DT_a] && ncvl == [3] && (nct == [2] || nct == [-2])
+        # e6, e7, e8 or E8
+    end
+
+
+
+end
 
 
 function try_extend(VS::BitSet,S::InducedSubDiagram,D,v::Integer)
@@ -250,8 +473,10 @@ function try_extend(VS::BitSet,S::InducedSubDiagram,D,v::Integer)
     
     components = S.connected_components
     
+    # joined should/will be of type ConnectedInducedSubDiagram
     joined = Nothing # Here is the result
-
+    
+    # special case, no component in S, so we just return the singleton
     if length(components) == 0
         joined = singleton(v)
         return InducedSubDiagram(Set([joined]))
@@ -269,6 +494,8 @@ function try_extend(VS::BitSet,S::InducedSubDiagram,D,v::Integer)
             push!(non_neighboring_components,c)
         end
     end
+
+     
 
     if length(neighbors_v) > 3 # no subgraph has vertices of valency > 3
         return Nothing
@@ -423,7 +650,7 @@ function try_extend(VS::BitSet,S::InducedSubDiagram,D,v::Integer)
     println(joined)
     println("########## ####### ##################")
     @assert is_subdiagram(joined,D,size(D,1))
-    @assert is_subdiagram2(joined,D,size(D,1))
+    @assert is_subdiagram(joined,D,size(D,1))
 
     return InducedSubDiagram(Set([joined])∪Set(non_neighboring_components))
 
@@ -478,14 +705,8 @@ function test_non_sporadic_connected_diagrams()
               2 0 2 3;
               2 2 0 3;
               3 3 3 0]
-    @assert(is_subdiagram2(ConnectedInducedSubDiagram([1, 2, 4, 3],ASimpleBranch,NoEnd),tripod,4)[1])
-    @assert(!is_subdiagram2(ConnectedInducedSubDiagram([4, 1, 2, 3],ASimpleBranch,NoEnd),tripod,4)[1], "it's a tripod but the description is invalid")
+    @assert(is_subdiagram(ConnectedInducedSubDiagram([1, 2, 4, 3],ASimpleBranch,NoEnd),tripod,4)[1])
+    @assert(!is_subdiagram(ConnectedInducedSubDiagram([4, 1, 2, 3],ASimpleBranch,NoEnd),tripod,4)[1], "it's a tripod but the description is invalid")
 
-    badtripod = [0 4 2 3;
-              4 0 2 3;
-              2 2 0 3;
-              3 3 3 0]
-    @assert(!is_subdiagram(ConnectedInducedSubDiagram([1, 2, 4, 3],ASimpleBranch,NoEnd),badtripod,4))
-    @assert(!is_subdiagram(ConnectedInducedSubDiagram([4, 1, 2, 3],ASimpleBranch,NoEnd),badtripod,4))
 
 end
