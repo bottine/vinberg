@@ -1,6 +1,6 @@
 ## Copied from qsolve.py
 
-using Convex, GLPK
+using Convex, SCS, GLPK, COSMO, Cbc, Clp
 using LinearAlgebra
 using Base
 using MathOptInterface
@@ -60,7 +60,7 @@ function diagonalize(A)
 
     @assert LinearAlgebra.isdiag(D) "D is diagonal", D
     @assert P'*A*P == D "We have a diagonalization"
-
+    println("diagonalized of types $(typeof(P)) and $(typeof(D))")
     
     return (D,P)
 
@@ -156,8 +156,8 @@ function test_get_integer_points()
 end
 
 
-#function is_necessary_hyperplane(cone_roots::Array{Array{Int,1},1},A::Array{Int,2},root::Array{Int,1})
-function is_necessary_hyperplane(cone_roots,A,root)
+function is_necessary_hyperplane(cone_roots::Array{Array{BigInt,1},1},A::Array{BigInt,2},root::Array{BigInt,1})
+#function is_necessary_hyperplane(cone_roots,A,root)
     # The elements of cone_roots are roots of the lattice, and the cone they represent 
     # is the elements x in real space satisfying x'*A*r ≤ 0 for all r in cone_roots.
     # want to check that the cone obtained by intersecting with the half-space defined by r is strictly contained.
@@ -179,7 +179,7 @@ function is_necessary_hyperplane(cone_roots,A,root)
     # it should only be strictly bigger than zero, but Convex.jl does not do "strictly", so we change it to ≥ 1 (and since we have a cone, it should be the same result)
 
     
-    solve!(p,GLPK.Optimizer())
+    solve!(p,Cbc.Optimizer(verbose=false), verbose=false)
    
 
     if p.status == MathOptInterface.INFEASIBLE 
