@@ -49,17 +49,10 @@ function Base.:(==)(L1::QuadLattice,L2::QuadLattice)
     L1.G == L2.G
 end
 
-function Base.:(==)(L1::VinbergLattice,L2::VinbergLattice)
-    @assert false "Let's not compare vinberg lattices yet"
-end
 
-function Base.:(==)(v1::QuadLatticeElement,v2::QuadLatticeElement)
-    v1.L == v2.L && v1.vec == v2.vec
-end
 
-function Base.isequal(v1::QuadLatticeElement,v2::QuadLatticeElement)
-    v1.L == v2.L && v1.vec == v2.vec
-end
+
+
 
 function rank(L::QuadLattice)
     return L.n_pos + L.n_neg
@@ -70,7 +63,13 @@ struct QuadLatticeElement
     vec::Array{BigInt,1}
     #vec::Array{Int,1}
 end
+function Base.isequal(v1::QuadLatticeElement,v2::QuadLatticeElement)
+    v1.L == v2.L && v1.vec == v2.vec
+end
 
+function Base.:(==)(v1::QuadLatticeElement,v2::QuadLatticeElement)
+    v1.L == v2.L && v1.vec == v2.vec
+end
 struct VinbergLattice
     # By which we mean, a quadratic lattice along with
     # * An element of negative norm v₀
@@ -83,6 +82,9 @@ struct VinbergLattice
     W_reps # ::{QuadLatticeElement}
 end
 
+function Base.:(==)(L1::VinbergLattice,L2::VinbergLattice)
+    @assert false "Let's not compare vinberg lattices yet"
+end
 
 function VinbergLattice(G)
     assert_sig_n_1_matrix(G)

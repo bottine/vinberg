@@ -95,7 +95,7 @@ function qsolve_naive(A::Array{BigInt,2},b::Array{BigInt,1},γ::BigInt)
 #    println(" and γ as $γ")
 
     @assert issymmetric(A) "A must be symmetric"
-    #@assert isposdef(A) "A must be positive definite"
+    @assert isposdef(A) "A must be positive definite"
     # TODO put this back!!!!! but make sure it actually works
 
     n = size(A,1)
