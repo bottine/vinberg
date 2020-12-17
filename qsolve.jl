@@ -86,13 +86,13 @@ end
 
 function qsolve_naive(A::Array{BigInt,2},b::Array{BigInt,1},γ::BigInt)
     
-    println("QSOLVE x'Ax + b'x + γ = 0 with A as:")
-    display(A)
-    println("")
-    println(" and b as")
-    display(b)
-    println("")
-    println(" and γ as $γ")
+#    println("QSOLVE x'Ax + b'x + γ = 0 with A as:")
+#    display(A)
+#    println("")
+#    println(" and b as")
+#    display(b)
+#    println("")
+#    println(" and γ as $γ")
 
     @assert issymmetric(A) "A must be symmetric"
     #@assert isposdef(A) "A must be positive definite"
@@ -107,11 +107,11 @@ function qsolve_naive(A::Array{BigInt,2},b::Array{BigInt,1},γ::BigInt)
     end
     d = diag(D)
 
-    println("Diagonalization: P is ($(typeof(P)))")
-    display(P)
-    println("\n and D is($(typeof(D)))")
-    display(D)
-    println("\n")
+#    println("Diagonalization: P is ($(typeof(P)))")
+#    display(P)
+#    println("\n and D is($(typeof(D)))")
+#    display(D)
+#    println("\n")
 
 
     @assert P'*A*P == D "We have a diagonalization"
@@ -129,10 +129,10 @@ function qsolve_naive(A::Array{BigInt,2},b::Array{BigInt,1},γ::BigInt)
     
     bounding_box_diag = bounding_box_diago(d,P'*b,γ)
     representatives    = get_integer_points(P)
-
-    println("# representatives: ", length(representatives))
-    println("# bounding_box_diag: ", length(bounding_box_diag))
-
+#
+#    println("# representatives: ", length(representatives))
+#    println("# bounding_box_diag: ", length(bounding_box_diag))
+#
     solutions = Set()
     for v0 in bounding_box_diag, r in representatives
         v = P*v0 + r
@@ -142,9 +142,7 @@ function qsolve_naive(A::Array{BigInt,2},b::Array{BigInt,1},γ::BigInt)
         end
     end
     
-    for s in solutions
-        println("$s of type $(typeof(s))")
-    end
+
     return [BigInt.(s) for s in solutions] 
 end
 

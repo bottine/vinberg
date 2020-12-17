@@ -60,7 +60,6 @@ function diagonalize(A)
 
     @assert LinearAlgebra.isdiag(D) "D is diagonal", D
     @assert P'*A*P == D "We have a diagonalization"
-    println("diagonalized of types $(typeof(P)) and $(typeof(D))")
     
     return (D,P)
 
@@ -102,7 +101,7 @@ function get_integer_points(M)
         bounding_box = [vcat(vec, [val]) for vec in bounding_box for val in minimum[i]:maximum[i]-1] 
     end
     
-    println("bdng_box size $(length(bounding_box))")
+#    println("bdng_box size $(length(bounding_box))")
 
     function parallelipiped_contains(v)
         Q = inv(M)*v
@@ -129,13 +128,11 @@ function get_sublattice_representatives(M)
     M2 = M
     for i in 2:n
         if M2[i,:] ⋅ M2[1,:] < 0
-            println("hello")
             M2[i,:] = -M2[i,:]
             @assert M2[i,:] ⋅ M2[1,:] > 0
         end
     end
 
-    println("-----------------")
     @assert length(get_integer_points(M)) == length(get_integer_points(M2))
 
 end
@@ -179,7 +176,7 @@ function is_necessary_hyperplane(cone_roots::Array{Array{BigInt,1},1},A::Array{B
     # it should only be strictly bigger than zero, but Convex.jl does not do "strictly", so we change it to ≥ 1 (and since we have a cone, it should be the same result)
 
     
-    solve!(p,Cbc.Optimizer(verbose=false), verbose=false)
+    solve!(p,Cbc.Optimizer(verbose=0), verbose=false)
    
 
     if p.status == MathOptInterface.INFEASIBLE 
