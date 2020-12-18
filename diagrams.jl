@@ -58,42 +58,7 @@ struct ConnectedInducedSubDiagram
     type::DiagramType 
 end
 
-#function draw(c::ConnectedInducedDiagram,D,color="black")
-#    nodefillc = [v∈c.vertices ? "black" : "grey" for v in 1:n]
-#    edgelabel = []
-#    g = SimpleGraph()
-#    for i in 1:n
-#        add_vertex!(g,i) 
-#        for j in 1:i-1
-#            if D[i,j] ≠ 2
-#                g.add_edge!(g,i,j)
-#                push!(edgelabel,D[i,j])
-#        end
-#    end
-#    draw(PDF("./$D/$c.pdf", 16cm, 16cm), gplot(g,edgelabel=edgelabel,nodelabel=nodelabel,nodefillc=nodefillc))
-#end
-#
-#
-#function draw(c:InducedSubDiagram,D)
-#    
-#    n = size(D,1)
-#    @assert size(D) == (n,n) && D = D'
-#
-#    nodelabel = [1:n]
-#
-#    g = SimpleGraph()
-#    for i in 1:n
-#        add_vertex!(g,i) 
-#        for j in 1:i-1
-#            if D[i,j] ≠ 2
-#                g.add_edge!(g,i,j)
-#                push!(edgelabel,D[i,j])
-#        end
-#    end
-#
-#    nodefillc = distinguishable_colors(length(c.connected_components), colorant"blue")
-#
-#end
+
 
 card(c::ConnectedInducedSubDiagram) = length(c.vertices)
 
