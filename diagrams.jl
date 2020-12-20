@@ -4,6 +4,8 @@ using GraphPlot
 using Colors
 using Multisets
 
+include("diagram_matrices.jl")
+
 # Referring to https://en.wikipedia.org/wiki/Coxeter%E2%80%93Dynkin_diagram#Application_with_uniform_polytopes
 # These are the different isomorphism types of subdiagrams of spherical/affine Coxeter-Dynkin diagrams
 @enum DiagramType begin
@@ -57,6 +59,23 @@ end
 struct DiagramAndSubs 
     D::Array{Int,(2)}
     subs::Dict{BitSet,(InducedSubDiagram)}
+end
+
+
+function print_DAS(das::DiagramAndSubs)
+    
+    println("The matrix is given by:")
+    display(das.D)
+    println()
+    println("and the subdiagrams are:")
+    for (sub_support, sub_diagram) in das.subs
+        println("$sub_support:")
+        for component in sub_diagram.connected_components
+            println("    $(component.type) : $(component.vertices)")
+        end
+    end
+    println("***********************")
+
 end
 
 function is_finite_volume(dag,dim)
@@ -128,24 +147,31 @@ function small_diagram_type(VS::BitSet,D)
     
     deg_seqs = MS{MS{Int}}()
     for v in VS
-        deg_seq_v = MS()
-        simple_neighbors_v = Set()
-        for u in VS
+        println("Hello $v in $VS")
+        deg_seq_v = MS{Int}()
+        simple_neighbors_v = []
+        for u in VS if u ≠ v
             if D[u,v] == 3
                 push!(simple_neighbors_v,u)
             end
-            if D[u,v] ≠ 2
+            if D[u,v] ≠ 2 
                 push!(deg_seq_v,D[u,v])
             end
-        end
+        end end
         if deg_seq_v == trivalent
             push!(deg3_vertices,v => simple_neighbors_v)
         elseif deg_seq_v == monovalent
             push!(deg1_vertices,v => simple_neighbors_v)
         end
+        push!(deg_seqs, deg_seq_v)
     end    
     ds = deg_seqs
+    
+    println("ds is $ds")
+    println("1*deg1 is $(1*deg1)")
+    println("2*deg1 + (VSC-2)deg2 is $(2*deg1 + (VSC-2)*deg2)")
 
+    VS = collect(VS)
 
     if false
         @assert false "For alignment's sake"
@@ -273,11 +299,11 @@ function try_extend(VS::BitSet,S::InducedSubDiagram,D,v::Int)
    
     
 
-    sort!(neighboring_components_data) # I think since the tuples have c.type as first entry and card(c) as second, the ordering is automatically the right one
+    sort!(neighboring_components_data, by=(x->(x[1],x[2]))) # I think since the tuples have c.type as first entry and card(c) as second, the ordering is automatically the right one
     # TODO check that 
     ncd = neighboring_components_data
     @assert all(ncd[i][1] ≤ ncd[i+1][1] for i in 1:length(ncd)-1) "ordered according to type first"
-    @assert all( ( ncd[i][1] ≤ ncd[i+1][1] ? ncd[i][2]≤ncd[i+2][2] : true ) for i in 1:length(ncd)-1) "after type, ordered according to cardinality"
+    @assert all( ( ncd[i][1] ≤ ncd[i+1][1] ? ncd[i][2]≤ncd[i+1][2] : true ) for i in 1:length(ncd)-1) "after type, ordered according to cardinality"
     
 
     neighboring_components_vertices = []
@@ -422,11 +448,13 @@ function try_extend(VS::BitSet,S::InducedSubDiagram,D,v::Int)
 
 
     if joined === nothing && sum(ncs) + 1 ≤ 9 # all sporadic  subgraphs covered here
+        println("we have a small diagram…")
         vertices = BitSet()
         for c in nc
             vertices = vertices ∪ BitSet(c.vertices)
         end
         push!(vertices,v)
+        println("… with vertices $vertices")
         joined = small_diagram_type(vertices, D)
     end
 
@@ -461,6 +489,7 @@ function extend(DAS::DiagramAndSubs, v::Array{Int,1})
 
     new_subs::Dict{BitSet,InducedSubDiagram} = Dict()
     for (V,S) in subs
+        println("Extending subdiagram $S")
         S_and_v = try_extend(V,S,D,new_vertex)
         println("S_and_v is $S_and_v")
         if S_and_v ≠ nothing 
@@ -482,6 +511,7 @@ function build_diagram_and_subs(M)
 
     DAS = DiagramAndSubs(reshape([],0,0),lol)
     for i in 1:n
+        println("Extending with vertex $i")
         DAS = extend(DAS,M[i,1:i-1]) 
     end
     println(DAS)
