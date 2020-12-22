@@ -39,7 +39,7 @@ include("diagram_matrices.jl")
 end
 
 is_spherical(dt::DiagramType) = dt ∈ Set([DT_a,DT_b,DT_d,DT_e6,DT_e7,DT_e8,DT_f4,DT_g2,DT_h2,DT_h3,DT_h4,DT_in])
-is_affine(dt::DiagramType) = dt ∈ Set([DT_A,DT_B,DT_C,DT_D,DT_F4,DT_G2,DT_Iinfty])
+is_affine(dt::DiagramType) = dt ∈ Set([DT_A,DT_B,DT_C,DT_D,DT_E6,DT_E7,DT_E8,DT_F4,DT_G2,DT_Iinfty])
 
 struct ConnectedInducedSubDiagram
     vertices::Array{Int,1}
@@ -77,7 +77,7 @@ function print_DAS(das::DiagramAndSubs)
     println()
     println("and the subdiagrams are:")
     for (sub_support, sub_diagram) in das.subs
-        println("$(collect(sub_support)):")
+        println("$(collect(sub_support)) [affine=$(is_affine(sub_diagram)),spherical=$(is_spherical(sub_diagram))]:")
         for component in sub_diagram.connected_components
             println("    $(component.type) : $(component.vertices)")
         end
@@ -104,9 +104,8 @@ function is_finite_volume(path::String)
 
 end
 
-function is_finite_volume(dag,dim)
+function is_finite_volume(dag,n)
     # Has spherical/parabolic diagram of rank n-1
-    n = dim-1
     has_spherical_sub_of_rank_n = false
     has_affine_sub_of_rank_n_minus_1 = false
 
@@ -132,11 +131,15 @@ function is_finite_volume(dag,dim)
                 ) 
             ]
             if length(extensions) ≠ 2
+                @debug "the subdiagram of support $support has $(length(extensions)) affine/spherical extensions"
                 return false
             end
         end
     
     end
+    
+    @debug "has_affine_sub_of_rank_n_minus_1 = $has_affine_sub_of_rank_n_minus_1"
+    @debug "has_spherical_sub_of_rank_n = $has_spherical_sub_of_rank_n"
 
     return has_affine_sub_of_rank_n_minus_1 || has_spherical_sub_of_rank_n
 
@@ -274,7 +277,7 @@ function small_connected_sporadic_diagram_type(VS::BitSet,D)
         return CISD(VS,DT_G2)
     elseif ds == deg_seq_Iinfty
         return CISD(VS,DT_Iinfty)
-    elseif ds == deg_seq_i(ds[1][1])
+    elseif length(ds) ≥ 1 && length(first(ds)) ≥ 1 && ds == deg_seq_i(first(first(ds)))
         return CISD(VS,DT_in)
 
 
