@@ -8,10 +8,12 @@ include("diagram_matrices.jl")
 
 # Referring to https://en.wikipedia.org/wiki/Coxeter%E2%80%93Dynkin_diagram#Application_with_uniform_polytopes
 # These are the different isomorphism types of subdiagrams of spherical/affine Coxeter-Dynkin diagrams
+# 
+# WARNING: for non sporadic diagrams, the number associated is the number of vertices, and not the rank
 @enum DiagramType begin
     # Lowercase == Spherical
     DT_a
-    DT_b # == C 
+    DT_b # == c 
     DT_d
 
     DT_e6
@@ -38,7 +40,6 @@ end
 
 is_spherical(dt::DiagramType) = dt ∈ Set([DT_a,DT_b,DT_d,DT_e6,DT_e7,DT_e8,DT_f4,DT_g2,DT_h2,DT_h3,DT_h4,DT_in])
 is_affine(dt::DiagramType) = dt ∈ Set([DT_A,DT_B,DT_C,DT_D,DT_F4,DT_G2,DT_Iinfty])
-
 
 struct ConnectedInducedSubDiagram
     vertices::Array{Int,1}
@@ -85,7 +86,7 @@ function print_DAS(das::DiagramAndSubs)
 
 end
 
-function is_finite_volume(path)
+function is_finite_volume(path::String)
     
     # Get file content in s as in https://en.wikibooks.org/wiki/Introducing_Julia/Working_with_text_files
     s = open(path) do file
@@ -147,6 +148,10 @@ the_singleton(v::Integer) = CISD([v],DT_a)
 function build_deg_seq_and_associated_data(VS::BitSet,D)
 
     @assert true "The diagram here is assumed connected. maybe this deserves a check"
+    
+
+    @debug "build_deg_seq_and_associated_data(…)"
+    @debug "VS is $(collect(VS))"
 
     VSC = length(VS)
     
@@ -155,6 +160,9 @@ function build_deg_seq_and_associated_data(VS::BitSet,D)
     
     deg_seqs = MS{MS{Int}}()
     for v in VS
+
+        @debug "looking at $v"
+
         deg_seq_v = MS{Int}()
         simple_neighbors_v = Set{Int}()
         for u in VS if u ≠ v
@@ -171,23 +179,27 @@ function build_deg_seq_and_associated_data(VS::BitSet,D)
             push!(deg1_vertices,v => simple_neighbors_v)
         end
         push!(deg_seqs, deg_seq_v)
+        
+        @debug "$v has deg_seq = $deg_seq_v"
     end    
     ds = deg_seqs
+    println("ds is $ds")
+
+    center = ( length(collect(keys(deg3_vertices))) > 0 ? collect(keys(deg3_vertices))[1] : nothing )
+    center_neighbors = ( center === nothing ? Set() : deg3_vertices[center] )
+    extremities = Set(keys(deg1_vertices))
+    extremities_neighbors = ( isempty(extremities) ? Set() : ∪(values(deg1_vertices)...) )
     
-    return (ds, deg1_vertices, deg3_vertices)
+    return (ds, deg1_vertices, deg3_vertices, center, center_neighbors, extremities, extremities_neighbors)
 
 end
 
 function small_connected_non_sporadic_diagram_type(VS::BitSet,D)
     
     @assert true "The diagram here is assumed connected. maybe this deserves a check"
-
-    (ds, deg1_vertices, deg3_vertices) = build_deg_seq_and_associated_data(VS,D)
     
-    center = ( length(collect(keys(deg3_vertices))) > 0 ? collect(keys(deg3_vertices))[1] : nothing )
-    center_neighbors = ( center === nothing ? Set() : deg3_vertices[center] )
-    extremities = Set(keys(deg1_vertices))
-    extremities_neighbors = ( isempty(extremities) ? Set() : ∪(values(deg1_vertices)...) )
+    (ds, deg1_vertices, deg3_vertices, center, center_neighbors, extremities, extremities_neighbors) = build_deg_seq_and_associated_data(VS,D)
+    
 
     vertices = collect(VS)
     n = length(vertices)
@@ -206,7 +218,7 @@ function small_connected_non_sporadic_diagram_type(VS::BitSet,D)
     elseif n≥4 && ds == deg_seq_b(n)
         return CISD(vertices,DT_b, Set(keys(deg1_vertices)))
     
-    elseif  n≥4 ds == deg_seq_d(n)  && length(extremities ∩ center_neighbors) ≥ 2
+    elseif  n≥4 && ds == deg_seq_d(n)  && length(extremities ∩ center_neighbors) ≥ 2
         return CISD(vertices,DT_d,setdiff(extremities,center_neighbors))
 
     elseif n≥3 && ds == deg_seq_A(n)    
@@ -236,13 +248,8 @@ function small_connected_sporadic_diagram_type(VS::BitSet,D)
 
     @assert true "The diagram here is assumed connected. maybe this deserves a check"
 
-    (ds, deg1_vertices, deg3_vertices) = build_deg_seq_and_associated_data(VS,D)
 
-    center = ( length(collect(keys(deg3_vertices))) > 0 ? collect(keys(deg3_vertices))[1] : nothing )
-    center_neighbors = ( center === nothing ? nothing : deg3_vertices[center] )
-    extremities = Set(keys(deg1_vertices))
-    extremities_neighbors = ( isempty(extremities) ? nothing : ∪(values(deg1_vertices)...) )
-
+    (ds, deg1_vertices, deg3_vertices, center, center_neighbors, extremities, extremities_neighbors) = build_deg_seq_and_associated_data(VS,D)
 
 
     VS = collect(VS)
@@ -470,7 +477,8 @@ function try_extend(VS::BitSet,S::InducedSubDiagram,D,v::Int)
 
     
     =#
-   vertices = BitSet()
+    
+    vertices = BitSet()
     for c in nc
         vertices = vertices ∪ BitSet(c.vertices)
     end
@@ -479,7 +487,7 @@ function try_extend(VS::BitSet,S::InducedSubDiagram,D,v::Int)
         joined = small_connected_sporadic_diagram_type(vertices,D) 
     end
     if joined === nothing
-        joined = small_connected_non_sporadic_diagram_type(vertices, D)
+        joined = small_connected_non_sporadic_diagram_type(vertices,D)
     end
     
 
