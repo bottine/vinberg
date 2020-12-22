@@ -66,7 +66,7 @@ end
 
 struct DiagramAndSubs 
     D::Array{Int,(2)}
-    subs::Dict{BitSet,(InducedSubDiagram)}
+    subs::Dict{Set{Int},(InducedSubDiagram)}
 end
 
 
@@ -93,18 +93,22 @@ function is_finite_volume(path::String)
         read(file, String)
     end
 
-    (D, rank) = gug_coxiter_to_matrix(s)
-
-    if D === nothing || rank === nothing
-        println("Error reading file probably")
+    ret = gug_coxiter_to_matrix(s)
+    if ret === nothing
+        println("Failed reading $path")
     else
-        return is_finite_volume(build_diagram_and_subs(D),rank)
+        (D, rank) = ret
+        if D === nothing || rank === nothing
+            println("Error reading file probably")
+        else
+            return is_finite_volume(build_diagram_and_subs(D),rank)
+        end
     end
 
 
 end
 
-function is_finite_volume(dag,n)
+function is_compact_or_finite_volume(dag::DiagramAndSubs,n::Int)
     # Has spherical/parabolic diagram of rank n-1
     has_spherical_sub_of_rank_n = false
     has_affine_sub_of_rank_n_minus_1 = false
@@ -146,12 +150,11 @@ function is_finite_volume(dag,n)
 end
 
 is_empty(S1::ConnectedInducedSubDiagram) = length(S1.vertices) == 0
-the_singleton(v::Integer) = CISD([v],DT_a)
+the_singleton(v::Int) = CISD([v],DT_a)
 
-function build_deg_seq_and_associated_data(VS::BitSet,D)
+function build_deg_seq_and_associated_data(VS::Set{Int},D::Array{Int,2})
 
     @assert true "The diagram here is assumed connected. maybe this deserves a check"
-    
 
     @debug "build_deg_seq_and_associated_data(…)"
     @debug "VS is $(collect(VS))"
@@ -186,7 +189,6 @@ function build_deg_seq_and_associated_data(VS::BitSet,D)
         @debug "$v has deg_seq = $deg_seq_v"
     end    
     ds = deg_seqs
-    println("ds is $ds")
 
     center = ( length(collect(keys(deg3_vertices))) > 0 ? collect(keys(deg3_vertices))[1] : nothing )
     center_neighbors = ( center === nothing ? Set() : deg3_vertices[center] )
@@ -197,7 +199,7 @@ function build_deg_seq_and_associated_data(VS::BitSet,D)
 
 end
 
-function small_connected_non_sporadic_diagram_type(VS::BitSet,D)
+function small_connected_non_sporadic_diagram_type(VS::Set{Int},D::Array{Int,2})
     
     @assert true "The diagram here is assumed connected. maybe this deserves a check"
     
@@ -247,7 +249,7 @@ function small_connected_non_sporadic_diagram_type(VS::BitSet,D)
     end    
 end
 
-function small_connected_sporadic_diagram_type(VS::BitSet,D)
+function small_connected_sporadic_diagram_type(VS::Set{Int},D::Array{Int,2})
 
     @assert true "The diagram here is assumed connected. maybe this deserves a check"
 
@@ -277,7 +279,7 @@ function small_connected_sporadic_diagram_type(VS::BitSet,D)
         return CISD(VS,DT_G2)
     elseif ds == deg_seq_Iinfty
         return CISD(VS,DT_Iinfty)
-    elseif length(ds) ≥ 1 && length(first(ds)) ≥ 1 && ds == deg_seq_i(first(first(ds)))
+    elseif length(ds) ≥ 1 && length(first(ds)) ≥ 1 && first(first(ds)) ≥ 6 && ds == deg_seq_i(first(first(ds)))
         return CISD(VS,DT_in)
 
 
@@ -299,7 +301,7 @@ function small_connected_sporadic_diagram_type(VS::BitSet,D)
 
 end
 
-function try_extend(VS::BitSet,S::InducedSubDiagram,D,v::Int)
+function try_extend(VS::Set{Int},S::InducedSubDiagram,D::Array{Int,2},v::Int)
     components = S.connected_components
     
     # joined should/will be of type ConnectedInducedSubDiagram
@@ -332,7 +334,7 @@ function try_extend(VS::BitSet,S::InducedSubDiagram,D,v::Int)
     # TODO check that 
     ncd = neighboring_components_data
     @assert all(ncd[i][1].type ≤ ncd[i+1][1].type for i in 1:length(ncd)-1) "ordered according to type first"
-    @assert all( ( ncd[i][1].type ≤ ncd[i+1][1].type ? card(ncd[i][1])≤card(ncd[i+1][1]) : true ) for i in 1:length(ncd)-1) "after type, ordered according to cardinality"
+    @assert all( ( ncd[i][1].type == ncd[i+1][1].type ? card(ncd[i][1])≤card(ncd[i+1][1]) : true ) for i in 1:length(ncd)-1) "after type, ordered according to cardinality"
     
 
     neighboring_components_vertices = []
@@ -344,147 +346,8 @@ function try_extend(VS::BitSet,S::InducedSubDiagram,D,v::Int)
     ncvl = [d[2] for d in ncd]          # neighboring_components_vertices_labels
     ncep = [d[1].ext_points for d in ncd]
 
-    #=
-    function swap(col::Set{T},from::T,to::T)
-        @assert from ∈ col
-        @assert to ≠ from
-        return push(remove(col,from,to))
-    end
-
-
-    # This block covers only the non sporadic diagrams
-    if false
-        @assert false "For alignment's sake"
-
-    elseif length(nv) == 0
-        joined = the_singleton(v)
     
-    elseif length(nv) == 1
-         
-        println("Hello length(nv) == 1")
-        # v has only one neighbor, so extends exactly one (non sporadic) diagram with an edge
-        # Since the affine diagrams can't be extended, the neighboring diagram of v is necessarily of type a,b,d.
-        # The way those can be extended are:
-        #
-        #
-        #     v ---- * ---- (the rest)          or         v ==== * ---- (the rest)           or            v ---- * ---- (the rest)
-        #                                                                                                          |
-        #                                                                                                          |
-        #                                                                                                          *
-        
-        if false
-            @assert false "For alignment's sake"
-        
-        # These correspond to "prolonging" a spherical (non-sporadic) diagram (i.e. v----*), thus resulting in a diagram of same type
-        elseif nct[1] == DT_a && ncvl[1] == 3 && nv[1] ∈ ncep[1] 
-            joined = CISD(push(nc.v,v),DT_a,ext_points=swap(ncep[1],nv[1]),v)
-        elseif nct[1] == DT_b && ncvl[1] == 3 && nv[1] ∈ ncep[1]
-            joined = CISD(push(nc.v,v),DT_b,ext_points=swap(ncep[1],nv[1],v))
-        elseif nct[1] == DT_d && ncvl[1] == 3 && nv[1] ∈ ncep[1]
-            joined = CISD(push(nc.v,v),DT_d,ext_points=swap(ncep[1],nv[1]),v)
-        
-        # These correspond to adding a  v ==== * edge to a spherical (non-sporadic) diagram, thus resulting in a b,B, or C diagram
-        elseif nct[1] == DT_a && ncvl[1] == 4 && nv[1] ∈ ncep[1] 
-            joined = CISD(push(nc.v,v),DT_b,ext_points=swap(ncep[1],nv[1],v)) 
-        elseif nct[1] == DT_b && ncvl[1] == 4 && nv[1] ∈ ncep[1]
-            joined = CISD(push(nc.v,v),DT_C)
-        elseif nct[1] == DT_d && ncvl[1] == 4 && nv[1] ∈ ncep[1]
-            joined = CISD(push(nc.v,v),DT_B)
-        
-        # These correspond to adding a  "third" edge to just before the end of a spherical (non-sporadic) diagram, thus resulting in a d,B or D diagram
-        elseif nct[1] == DT_a && ncvl[1] == 3 && length(nc[1].left_end) == 2 && nv[1] == nc[1].left_end[2]
-            joined = ConnectedInducedSubDiagram(push(nc.v,v),DT_d,[v,nc[1].left_end[1]],nc[1].right_end)
-        elseif nct[1] == DT_a && ncvl[1] == 3 && length(nc[1].right_end) == 2 && nv[1] == nc[1].right_end[2]
-            joined = ConnectedInducedSubDiagram(push(nc.v,v),DT_d,[v,nc[1].right_end[1]],nc[1].left_end) # By convention, the right end is the special one, hence the swap
-        elseif nct[1] == DT_b && ncvl[1] == 3 && length(nc[1].left_end) == 2 && nv[1] == nc[1].left_end[2]
-            joined = ConnectedInducedSubDiagram(push(nc.v,v),DT_B,[v,nc[1].left_end[1]],nc[1].right_end)
-        elseif nct[1] == DT_d && ncvl[1] == 3 && length(nc[1].left_end) == 2 && nv[1] == nc[1].left_end[2]
-            joined = ConnectedInducedSubDiagram(push(nc.v,v),DT_D,[v,nc[1].left_end[1]],nc[1].right_end)
-        end
-
-    elseif length(nv) == 2
-
-       # v has 2 neighbors, either twice the same connected component, in which case it's of type a, and adding v makes it type A
-       #                    or two connected components…
-        
-        println("Hello length(nv) == 2")
-       
-        if false
-            @assert false "For alignment's sake"
-        
-        # type a to type A
-        elseif length(nc) == 1 && nct[1] == DT_a && ncvl == [3,3] && nv == [nc[1].left_end[1],nc[1].right_end[1]]
-            joined = ConnectedInducedSubDiagram(push(nc.vertices,v),DT_A,[])
-        elseif length(nc) == 1 && nct[1] == DT_a && ncvl == [3,3] && nv == [nc[1].right_end[1],nc[1].left_end[1]]
-            joined = ConnectedInducedSubDiagram(push(nc.vertices,v),DT_A,[])
-
-        # v connects two components of type a each
-        elseif length(nc) == 2 && nct == [DT_a,DT_a] && ncvl == [3,3] && nv == [nc[1].left_end[1],nc[2].right_end[1]]
-            joined = ConnectedInducedSubDiagram([nc[1].vertices nc[2].vertices [v]],DT_a, nc[1].right_end, nc[2].left_end)
-        elseif length(nc) == 2 && nct == [DT_a,DT_a] && ncvl == [3,3] && nv == [nc[1].right_end[1],nc[2].left_end[1]]
-            joined = ConnectedInducedSubDiagram([nc[1].vertices nc[2].vertices [v]],DT_a, nc[1].left_end, nc[2].right_end)
-        elseif length(nc) == 2 && nct == [DT_a,DT_a] && ncvl == [3,3] && nv == [nc[1].right_end[1],nc[2].right_end[1]]
-            joined = ConnectedInducedSubDiagram([nc[1].vertices nc[2].vertices [v]],DT_a, nc[1].left_end, nc[2].left_end)
-        elseif length(nc) == 2 && nct == [DT_a,DT_a] && ncvl == [3,3] && nv == [nc[1].left_end[1],nc[2].left_end[1]]
-            joined = ConnectedInducedSubDiagram([nc[1].vertices nc[2].vertices [v]],DT_a, nc[1].right_end, nc[2].right_end)
-           
-        
-        # v connects DT_a to DT_b
-        elseif length(nc) == 2 && nct == [DT_a,DT_b] && ncvl == [3,3] && nv == [nc[1].left_end[1],nc[2].left_end[1]]
-            joined = ConnectedInducedSubDiagram([nc[1].vertices nc[2].vertices [v]],DT_b, nc[1].right_end, nc[2].right_end)
-        elseif length(nc) == 2 && nct == [DT_a,DT_b] && ncvl == [3,3] && nv == [nc[1].right_end[1],nc[2].left_end[1]]
-            joined = ConnectedInducedSubDiagram([nc[1].vertices nc[2].vertices [v]],DT_b, nc[1].left_end, nc[2].right_end)
-        
-        # v connects DT_a to DT_d
-        elseif length(nc) == 2 && nct == [DT_a,DT_d] && ncvl == [3,3] && nv == [nc[1].left_end[1],nc[2].left_end[1]]
-            joined = ConnectedInducedSubDiagram([nc[1].vertices nc[2].vertices [v]],DT_d, nc[1].right_end, nc[2].right_end)
-        elseif length(nc) == 2 && nct == [DT_a,DT_d] && ncvl == [3,3] && nv == [nc[1].right_end[1],nc[2].left_end[1]]
-            joined = ConnectedInducedSubDiagram([nc[1].vertices nc[2].vertices [v]],DT_d, nc[1].left_end, nc[2].right_end)
-           
-        # v connects DT_b to DT_b resulting in DT_C
-        elseif length(nc) == 2 && nct == [DT_b,DT_b] && ncvl == [3,3] && nv == [nc[1].left_end[1],nc[2].left_end[1]]
-            joined = ConnectedInducedSubDiagram([nc[1].vertices nc[2].vertices [v]],DT_C, nc[1].right_end, nc[2].right_end)
-        
-        # v connects DT_b to DT_d resulting in DT_B
-        elseif length(nc) == 2 && nct == [DT_b,DT_d] && ncvl == [3,3] && nv == [nc[1].left_end[1],nc[2].left_end[1]]
-            joined = ConnectedInducedSubDiagram([nc[1].vertices nc[2].vertices [v]],DT_C, nc[1].right_end, nc[2].right_end)
-        
-            # v connects DT_d to DT_d resulting in DT_D
-        elseif length(nc) == 2 && nct == [DT_d,DT_d] && ncvl == [3,3] && nv == [nc[1].left_end[1],nc[2].left_end[1]]
-            joined = ConnectedInducedSubDiagram([nc[1].vertices nc[2].vertices [v]],DT_D, nc[1].right_end, nc[2].right_end)
-
-
-        end
-
-
-    elseif length(nv) == 3
-
-        # v has 3 neighbors, hence 3 neighboring components too
-        # Necessarily v yields a forky end, and thus corresponding to extensions of type a --> d, b --> B or d --> D
-        
-        println("Hello length(nv) == 3")
-
-        if false
-            @assert false "For alignment's sake"
-        elseif nct == [DT_a,DT_a,DT_a] && ncvl == [3,3,3] && nv[1] == nc[1].left_end[1] && ncs == [ncs[1],1,1]
-            joined = ConnectedInducedSubDiagram(push(nc.v,v),DT_d,nv[2:3],nc[1].right_end)
-        elseif nct == [DT_a,DT_a,DT_a] && ncvl == [3,3,3] && nv[1] == nc[1].right_end[1] && ncs == [ncs[1],1,1]
-            joined = ConnectedInducedSubDiagram(push(nc.v,v),DT_d,nc[1].left_end,nv[2:3])
-        elseif nct == [DT_b,DT_a,DT_a] && ncvl == [3,3,3] && nv[1] == nc[1].left_end[1] && ncs == [ncs[1],1,1]
-            joined = ConnectedInducedSubDiagram(push(nc.v,v),DT_B,nv[2:3],nc[1].right_end)
-        elseif nct == [DT_d,DT_a,DT_a] && ncvl == [3,3,3] && nv[1] == nc[1].left_end[1] && ncs == [ncs[1],1,1]
-            joined = ConnectedInducedSubDiagram(push(nc.v,v),DT_D,nv[2:3],nc[1].right_end)
-        end
-
-    end
-
-    
-    =#
-    
-    vertices = BitSet()
-    for c in nc
-        vertices = vertices ∪ BitSet(c.vertices)
-    end
+    vertices::Set{Int} = ∪(Set(),[Set(c.vertices)::Set{Int} for c in nc]...)
     push!(vertices,v)
     if joined === nothing && sum(ncs) + 1 ≤ 9 
         joined = small_connected_sporadic_diagram_type(vertices,D) 
@@ -509,12 +372,15 @@ is_affine(isd::InducedSubDiagram) = all(is_affine(c.type) for c in isd.connected
 is_spherical(isd::InducedSubDiagram) = all(is_spherical(c.type) for c in isd.connected_components)
 
 function extend(DAS::DiagramAndSubs, v::Array{Int,1})
+    
 
     D = DAS.D
     subs = DAS.subs
 
     n = length(v) 
     @assert size(D) == (n,n)
+    
+    println("Extending with $n")
 
     # Extend D with v
     D = [D v]
@@ -522,11 +388,11 @@ function extend(DAS::DiagramAndSubs, v::Array{Int,1})
    
     new_vertex = n+1
 
-    new_subs::Dict{BitSet,InducedSubDiagram} = Dict()
+    new_subs::Dict{Set{Int},InducedSubDiagram} = Dict()
     for (V,S) in subs
         S_and_v = try_extend(V,S,D,new_vertex)
         if S_and_v ≠ nothing 
-            push!(new_subs,(V∪BitSet([new_vertex])) => S_and_v)
+            push!(new_subs,(V∪Set([new_vertex])) => S_and_v)
         end
     end
     return DiagramAndSubs(D,merge(subs,new_subs))
@@ -534,13 +400,13 @@ function extend(DAS::DiagramAndSubs, v::Array{Int,1})
 end
 
 
-function build_diagram_and_subs(M)
+function build_diagram_and_subs(M::Array{Int,2})
     n = size(M,1)
     @assert size(M) == (n,n)
     # @assert issymetric(M)
     
     lol = Dict()
-    push!(lol,BitSet() => the_empty_isd())
+    push!(lol,Set() => the_empty_isd())
 
     DAS = DiagramAndSubs(reshape([],0,0),lol)
     for i in 1:n
@@ -550,6 +416,24 @@ function build_diagram_and_subs(M)
 end
 
 
-is_finite_volume(build_diagram_and_subs([1 2 3;
-                        2 1 3;
-                        3 2 1]),2)
+
+# ##########################
+#
+# Misc user-facing functions
+#
+# ##########################
+#
+
+function check_all_graphs()
+    
+
+    for (root, dirs, files) in walkdir("./graphs/")
+        for path in joinpath.(root, files)
+            if endswith(path,".coxiter")
+                println("path: $path")
+                println(is_finite_volume(path))
+            end
+        end
+    end
+
+end
