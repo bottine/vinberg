@@ -4,12 +4,12 @@ using GraphPlot
 using Colors
 using Multisets
 
-include("diagram_matrices.jl")
 
-# Referring to https://en.wikipedia.org/wiki/Coxeter%E2%80%93Dynkin_diagram#Application_with_uniform_polytopes
-# These are the different isomorphism types of subdiagrams of spherical/affine Coxeter-Dynkin diagrams
-# 
-# WARNING: for non sporadic diagrams, the number associated is the number of vertices, and not the rank
+
+
+
+# Referring to https://en.wikipedia.org/wiki/Coxeter%E2%80%93Dynkin_diagram
+# These are the different isomorphism types of irreducible (=connected) subdiagrams of spherical/affine Coxeter-Dynkin diagrams
 @enum DiagramType begin
     # Lowercase == Spherical
     DT_a
@@ -30,6 +30,7 @@ include("diagram_matrices.jl")
     DT_B
     DT_C
     DT_D
+
     DT_E6
     DT_E7
     DT_E8
@@ -40,26 +41,125 @@ end
 
 
 function is_spherical(dt::DiagramType)::Bool
-    dt ∈ Set([DT_a,DT_b,DT_d,DT_e6,DT_e7,DT_e8,DT_f4,DT_g2,DT_h2,DT_h3,DT_h4,DT_in])
-end
-function is_affine(dt::DiagramType)::Bool
-    dt ∈ Set([DT_A,DT_B,DT_C,DT_D,DT_E6,DT_E7,DT_E8,DT_F4,DT_G2,DT_Iinfty])
+    dt ∈ [DT_a,DT_b,DT_d,DT_e6,DT_e7,DT_e8,DT_f4,DT_g2,DT_h2,DT_h3,DT_h4,DT_in]
 end
 
+function is_affine(dt::DiagramType)::Bool
+    dt ∈ [DT_A,DT_B,DT_C,DT_D,DT_E6,DT_E7,DT_E8,DT_F4,DT_G2,DT_Iinfty]
+end
+
+function is_sporadic(dt::DiagramType)::Bool
+    dt ∈ [DT_e6,DT_e7,DT_e8,DT_f4,DT_g2,DT_h2,DT_h3,DT_h4,DT_in,DT_E6,DT_E7,DT_E8,DT_F4,DT_G2,DT_Iinfty]
+end
+
+
+
+
+
+MS = Multiset
+
+# Degree Sequence: Each vertex has an associated "multi-degree" which is a multiset containing the labels of edges incident to the vertex
+# A DegSeq is the multiset of the mult-degrees associated to the vertices of a diagram
+DegSeq = MS{MS{Int}}
+
+# Given an array of arrays of ints, returns the associated degree sequence
+function deg_seq(vv::Array{Array{Int,1},1})
+    return MS(MS.(vv))::DegSeq
+end
+
+# The degree sequences corresponding to each irreducible diagram types follow:
+
+deg_seq_a1 = deg_seq(Array{Array{Int,1},1}([[]]))
+deg_seq_a(n::Int) = begin
+    @assert n≥2
+    2*deg_seq([[3]]) + (n-2)*deg_seq([[3,3]])::DegSeq
+end
+
+deg_seq_b2 = deg_seq([[4],[4]])
+deg_seq_b3 = deg_seq([[4],[4,3],[3]])
+deg_seq_b(n)::DegSeq = begin
+    @assert n≥3
+    deg_seq([[4]]) + deg_seq([[4,3]]) + (n-3)*deg_seq([[3,3]]) + deg_seq([[3]])
+end
+
+deg_seq_d(n::Int)::DegSeq = begin
+    @assert n≥4
+    deg_seq([[3,3,3]]) + (n-4)*deg_seq([[3,3]]) + 3*deg_seq([[3]])
+end
+
+deg_seq_A(n::Int)::DegSeq = begin
+    @assert n≥3
+    n*deg_seq([[3,3]])
+end
+
+deg_seq_B4 = begin
+    deg_seq([[3,3,4]]) + 2*deg_seq([[3]]) + deg_seq([[4]])
+end
+
+deg_seq_B(n::Int)::DegSeq = begin
+    @assert n≥5
+    deg_seq([[3,3,3]]) + 2*deg_seq([[3]]) + (n-5)*deg_seq([[3,3]]) + deg_seq([[3,4]])  + deg_seq([[4]])
+end
+deg_seq_C3 = begin
+    deg_seq([[4,4]]) +  2*deg_seq([[4]])   
+end
+deg_seq_C(n::Int)::DegSeq = begin
+    @assert n≥4
+    2*deg_seq([[4,3]]) +  2*deg_seq([[4]])  + (n-4)*deg_seq([[3,3]])
+end
+
+deg_seq_D5 = begin
+    deg_seq([[3,3,3,3]]) + 4*deg_seq([[3]])
+end
+deg_seq_D(n::Int)::DegSeq = begin
+    @assert n≥6
+    2*deg_seq([[3,3,3]]) + 4*deg_seq([[3]]) + (n-6)*deg_seq([[3,3]])
+end
+
+
+deg_seq_f4 = deg_seq([[3],[3],[3,4],[3,4]])
+deg_seq_F4 = deg_seq([[3],[3],[3,3],[3,4],[3,4]])
+deg_seq_h2 = deg_seq([[5],[5]])
+deg_seq_h3 = deg_seq([[5],[5,3],[3]])
+deg_seq_h4 = deg_seq([[5],[5,3],[3,3],[3]])
+deg_seq_g2 = deg_seq([[6],[6]])
+deg_seq_G2 = deg_seq([[6],[6,3],[3]])
+deg_seq_Iinfty = deg_seq([[0],[0]])
+deg_seq_i(n::Int) = deg_seq([[n],[n]])
+
+deg_seq_e6 = deg_seq([[3,3,3],[3,3],[3,3],[3],[3],[3]])
+deg_seq_e7 = deg_seq([[3,3,3],[3,3],[3,3],[3,3],[3],[3],[3]])
+deg_seq_e8 = deg_seq([[3,3,3],[3,3],[3,3],[3,3],[3,3],[3],[3],[3]])
+deg_seq_E6 = deg_seq([[3,3,3],[3,3],[3,3],[3,3],[3],[3],[3]])
+deg_seq_E7 = deg_seq([[3,3,3],[3,3],[3,3],[3,3],[3,3],[3],[3],[3]])
+deg_seq_E8 = deg_seq([[3,3,3],[3,3],[3,3],[3,3],[3,3],[3,3],[3],[3],[3]])
+
+
+
+
+
+# A connected induced subdiagram.
+# connected = irreducible
+# We store the vertices and the type
 struct ConnectedInducedSubDiagram
     vertices::Array{Int,1}
     type::DiagramType
-    ext_points::Set{Int}
-    sec_points::Set{Int}
 end
 
-function CISD(vertices,type,ext_points=Set(),sec_points=Set())
-    ConnectedInducedSubDiagram(vertices,type,ext_points,sec_points)
+function CISD(vertices,type)
+    ConnectedInducedSubDiagram(vertices,type)
 end
 
 
 card(c::ConnectedInducedSubDiagram) = length(c.vertices)
 
+is_empty(c::ConnectedInducedSubDiagram) = length(c.vertices) == 0
+
+the_singleton(v::Int) = CISD([v],DT_a)
+
+
+# An arbitrary induced subdiagram
+# Stored as a collection of its irreducible components, plus whether it is affine or spherical
 struct InducedSubDiagram
     connected_components::Set{ConnectedInducedSubDiagram}
     is_affine::Bool
@@ -82,14 +182,11 @@ end
 
 struct DiagramAndSubs 
     D::Array{Int,(2)}
-    subs::Dict{Set{Int},(InducedSubDiagram)}
-# WIP   ordered_subs::Dict{Set{Int},(InducedSubDiagram,Set{Set{Int}},Set{Set{Int}})}
-# WIP   affine_subs_of_card::Array{Set{Set{Int}},1}
-# WIP   spherical_subs_of_card::Array{Set{Set{Int}},1}
+    subs::Dict{Set{Int},InducedSubDiagram}
 end
 
 
-function print_DAS(das::DiagramAndSubs)
+function print_das(das::DiagramAndSubs)
     
     println("The matrix is given by:")
     display(das.D)
@@ -105,38 +202,7 @@ function print_DAS(das::DiagramAndSubs)
 
 end
 
-# WIP
-#function is_finite_volume2(das::DiagramAndSubs,n::Int)
-#    
-#    for support in das.affine_subs_of_card[n] ∪ das.spherical_subs_of_card[n]
-#        num_affine_extensions = length(das.ordered_subs[2][support]) 
-#        num_spherical_extensions = length(das.ordered_subs[3][support])
-#        if num # TODO
-#    end
-#
-#end
 
-function is_finite_volume(path::String)
-    
-    # Get file content in s as in https://en.wikibooks.org/wiki/Introducing_Julia/Working_with_text_files
-    s = open(path) do file
-        read(file, String)
-    end
-
-    ret = gug_coxiter_to_matrix(s)
-    if ret === nothing
-        println("Failed reading $path")
-    else
-        (D, rank) = ret
-        if D === nothing || rank === nothing
-            println("Error reading file probably")
-        else
-            return is_finite_volume(build_diagram_and_subs(D;max_card=rank),rank)
-        end
-    end
-
-
-end
 
 function is_finite_volume(dag::DiagramAndSubs,n::Int)
     # Has spherical/parabolic diagram of rank n-1
@@ -179,8 +245,6 @@ function is_finite_volume(dag::DiagramAndSubs,n::Int)
 
 end
 
-is_empty(S1::ConnectedInducedSubDiagram) = length(S1.vertices) == 0
-the_singleton(v::Int) = CISD([v],DT_a)
 
 function build_deg_seq_and_associated_data(VS::Set{Int},D::Array{Int,2})
 
@@ -342,22 +406,36 @@ function try_extend(VS::Set{Int},S::InducedSubDiagram,D::Array{Int,2},v::Int)
         joined = the_singleton(v)
         return InducedSubDiagram(Set([joined]))
     end
+    
 
 
     # list of components, corresponding adjacencent vertices 
     neighbors_v = Set([u for u in eachindex(D[v,:]) if u≠v && u in VS && D[v,u]≠2])
+        
+    if length(neighbors_v) > 4 # early exit since the highest degree is 4 (in D₅ I think)
+        return nothing
+    end
+
     neighbors_v_labels = [D[u,v] for u in neighbors_v] 
+    if 1 ∈ neighbors_v_labels # early exit since 1-labelled edges are the "dotted" ones, forbidden in affine/spherical subdiagrams 
+        return nothing
+    end
     non_neighboring_components = []
     neighboring_components_data = [] 
     for c in components
         neighbors_in_c = [u for u in c.vertices if u in neighbors_v]
         if length(neighbors_in_c) > 0
+
+            if is_affine(c.type) # early exit since affine diagram can't be extended
+                return nothing
+            end
+
             push!(neighboring_components_data,(c, [D[u,v] for u in neighbors_in_c]))
         else
             push!(non_neighboring_components,c)
         end
     end
-   
+    
     
 
     sort!(neighboring_components_data, by=(x->(x[1].type,card(x[1])))) # I think since the tuples have c.type as first entry and card(c) as second, the ordering is automatically the right one
@@ -401,10 +479,10 @@ end
 is_affine(isd::InducedSubDiagram) = all(is_affine(c.type) for c in isd.connected_components)
 is_spherical(isd::InducedSubDiagram) = all(is_spherical(c.type) for c in isd.connected_components)
 
-function extend(DAS::DiagramAndSubs, v::Array{Int,1};max_card::Union{Nothing,Int}=nothing)
+function extend(das::DiagramAndSubs, v::Array{Int,1}; max_card::Union{Nothing,Int}=nothing)
   
-    D = DAS.D
-    subs = DAS.subs
+    D = das.D
+    subs = das.subs
 
     n = length(v) 
     @assert size(D) == (n,n)
@@ -415,7 +493,7 @@ function extend(DAS::DiagramAndSubs, v::Array{Int,1};max_card::Union{Nothing,Int
    
     new_vertex = n+1
 
-    new_subs::Dict{Set{Int},InducedSubDiagram} = Dict()
+    new_subs::Dict{Set{Int},InducedSubDiagram} = Dict{Set{Int},InducedSubDiagram}()
     for (V,S) in subs
         if !isnothing(max_card) && length(V) ≤ max_card - 1
             S_and_v = try_extend(V,S,D,new_vertex)
@@ -432,18 +510,20 @@ end
 
 
 function build_diagram_and_subs(M::Array{Int,2};max_card::Union{Nothing,Int}=nothing)
-    n = size(M,1)
-    @assert size(M) == (n,n)
-    # @assert issymetric(M)
     
-    lol = Dict()
-    push!(lol,Set() => the_empty_isd())
+    n = size(M,1)
+    @assert size(M) == (n,n) "M must be square"
+    @assert M == M' "M must be symmetric"
+    @assert all(l ≥ 0 for l in M) "M must have non-negative entries"
 
-    DAS = DiagramAndSubs(reshape([],0,0),lol)
+    subs = Dict{Set{Int},ConnectedInducedSubDiagram}()
+    push!(subs,Set{Int}() => the_empty_isd())
+
+    das = DiagramAndSubs(reshape([],0,0),subs)
     for i in 1:n
-        DAS = extend(DAS,M[i,1:i-1];max_card=max_card) 
+        das = extend(das,M[i,1:i-1];max_card=max_card) 
     end
-    return DAS
+    return das
 end
 
 
@@ -455,6 +535,30 @@ end
 # ##########################
 #
 
+
+function is_finite_volume(path::String)
+    
+    # Get file content in s as in https://en.wikibooks.org/wiki/Introducing_Julia/Working_with_text_files
+    s = open(path) do file
+        read(file, String)
+    end
+
+    ret = gug_coxiter_to_matrix(s)
+    if ret === nothing
+        println("Failed reading $path")
+    else
+        (D, rank) = ret
+        if D === nothing || rank === nothing
+            println("Error reading file probably")
+        else
+            return is_finite_volume(build_diagram_and_subs(D;max_card=rank),rank)
+        end
+    end
+
+
+end
+
+
 function check_all_graphs()
     
 
@@ -465,6 +569,16 @@ function check_all_graphs()
                 println(is_finite_volume(path))
             end
         end
+    end
+
+end
+
+
+function check_some_graphs()
+
+    @time for path in ["graphs/13-mcl11.coxiter"] 
+            println("path: $path")
+            println(is_finite_volume(path))
     end
 
 end
