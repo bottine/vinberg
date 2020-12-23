@@ -5,7 +5,7 @@ using Colors
 using Multisets
 
 
-
+include("diagram_matrices.jl")
 
 
 # Referring to https://en.wikipedia.org/wiki/Coxeter%E2%80%93Dynkin_diagram
@@ -308,17 +308,17 @@ function small_connected_non_sporadic_diagram_type(VS::Set{Int},D::Array{Int,2})
     elseif ds == deg_seq_a1
         return CISD(vertices,DT_a)
     elseif n≥2 && ds == deg_seq_a(n)
-        return CISD(vertices,DT_a, Set(keys(deg1_vertices)))
+        return CISD(vertices,DT_a)
     
     elseif ds == deg_seq_b2
         return CISD(vertices,DT_b)
     elseif ds == deg_seq_b3
         return CISD(vertices,DT_b)
     elseif n≥4 && ds == deg_seq_b(n)
-        return CISD(vertices,DT_b, Set(keys(deg1_vertices)))
+        return CISD(vertices,DT_b)
     
     elseif  n≥4 && ds == deg_seq_d(n)  && length(extremities ∩ center_neighbors) ≥ 2
-        return CISD(vertices,DT_d,setdiff(extremities,center_neighbors))
+        return CISD(vertices,DT_d)
 
     elseif n≥3 && ds == deg_seq_A(n)    
         return CISD(vertices,DT_A)
@@ -407,60 +407,52 @@ function try_extend(VS::Set{Int},S::InducedSubDiagram,D::Array{Int,2},v::Int)
         return InducedSubDiagram(Set([joined]))
     end
     
+    freedom = 4
 
+    neighboring_components::Set{ConnectedInducedSubDiagram} = Set()
+    neighboring_components_size::Set{Int} = Set()
+    non_neighboring_components::Set{ConnectedInducedSubDiagram} = Set()
 
-    # list of components, corresponding adjacencent vertices 
-    neighbors_v = Set([u for u in eachindex(D[v,:]) if u≠v && u in VS && D[v,u]≠2])
-        
-    if length(neighbors_v) > 4 # early exit since the highest degree is 4 (in D₅ I think)
-        return nothing
-    end
-
-    neighbors_v_labels = [D[u,v] for u in neighbors_v] 
-    if 1 ∈ neighbors_v_labels # early exit since 1-labelled edges are the "dotted" ones, forbidden in affine/spherical subdiagrams 
-        return nothing
-    end
-    non_neighboring_components = []
-    neighboring_components_data = [] 
+    total_size::Int = 1
+    only_sporadic::Bool = false
+    
     for c in components
-        neighbors_in_c = [u for u in c.vertices if u in neighbors_v]
-        if length(neighbors_in_c) > 0
-
-            if is_affine(c.type) # early exit since affine diagram can't be extended
+        for u in c.vertices
+            if D[u,v] == 1 # dotted edge => early out
                 return nothing
+            elseif D[u,v] ≠ 2 
+                if is_affine(c.type) # can't extend affine types => early out
+                    return nothing
+                end
+                if freedom ≤ 0  # can't have too many connections, neither too high degrees
+                    return nothing
+                end
+                freedom -= (min(D[u,v],5)-2)
+                push!(neighboring_components,c)
+                total_size += card(c)
+                if is_sporadic(c.type)
+                    only_sporadic = true
+                end
+                if D[u,v] > 4
+                    only_sporadic = true
+                end
             end
-
-            push!(neighboring_components_data,(c, [D[u,v] for u in neighbors_in_c]))
-        else
+        end
+        if c ∉ neighboring_components
             push!(non_neighboring_components,c)
         end
+
     end
-    
-    
-
-    sort!(neighboring_components_data, by=(x->(x[1].type,card(x[1])))) # I think since the tuples have c.type as first entry and card(c) as second, the ordering is automatically the right one
-    # TODO check that 
-    ncd = neighboring_components_data
-    @assert all(ncd[i][1].type ≤ ncd[i+1][1].type for i in 1:length(ncd)-1) "ordered according to type first"
-    @assert all( ( ncd[i][1].type == ncd[i+1][1].type ? card(ncd[i][1])≤card(ncd[i+1][1]) : true ) for i in 1:length(ncd)-1) "after type, ordered according to cardinality"
-    
-
-    neighboring_components_vertices = []
-    neighboring_components_vertices_labels = []
-    nv = neighbors_v 
-    nc = [d[1] for d in ncd]            # neighboring_components 
-    nct = [d[1].type for d in ncd]           # neighboring_components_types
-    ncs  = [card(d[1]) for d in ncd]          # neighboring_components_sizes
-    ncvl = [d[2] for d in ncd]          # neighboring_components_vertices_labels
-    ncep = [d[1].ext_points for d in ncd]
 
     
-    vertices::Set{Int} = ∪(Set(),[Set(c.vertices)::Set{Int} for c in nc]...)
+    vertices::Set{Int} = ∪(Set(),[Set(c.vertices)::Set{Int} for c in neighboring_components]...)
     push!(vertices,v)
-    if joined === nothing && sum(ncs) + 1 ≤ 9 
+
+
+    if joined === nothing && total_size ≤ 9 
         joined = small_connected_sporadic_diagram_type(vertices,D) 
     end
-    if joined === nothing
+    if joined === nothing && !only_sporadic
         joined = small_connected_non_sporadic_diagram_type(vertices,D)
     end
     
@@ -468,7 +460,7 @@ function try_extend(VS::Set{Int},S::InducedSubDiagram,D::Array{Int,2},v::Int)
     if joined === nothing
         return nothing
     else
-        new_components = non_neighboring_components; 
+        new_components = non_neighboring_components 
         push!(new_components,joined)
         return InducedSubDiagram(Set{ConnectedInducedSubDiagram}(new_components))
     end
@@ -516,7 +508,7 @@ function build_diagram_and_subs(M::Array{Int,2};max_card::Union{Nothing,Int}=not
     @assert M == M' "M must be symmetric"
     @assert all(l ≥ 0 for l in M) "M must have non-negative entries"
 
-    subs = Dict{Set{Int},ConnectedInducedSubDiagram}()
+    subs = Dict{Set{Int},InducedSubDiagram}()
     push!(subs,Set{Int}() => the_empty_isd())
 
     das = DiagramAndSubs(reshape([],0,0),subs)
@@ -562,7 +554,7 @@ end
 function check_all_graphs()
     
 
-    for (root, dirs, files) in walkdir("./graphs/simplices")
+    for (root, dirs, files) in walkdir("./graphs/")
         for path in joinpath.(root, files)
             if endswith(path,".coxiter")
                 println("path: $path")
@@ -576,9 +568,19 @@ end
 
 function check_some_graphs()
 
-    @time for path in ["graphs/13-mcl11.coxiter"] 
-            println("path: $path")
-            println(is_finite_volume(path))
+    @time begin
+        for path in ["graphs/13-mcl11.coxiter"] 
+                println("path: $path")
+                println(is_finite_volume(path))
+        end
+        for (root, dirs, files) in walkdir("./graphs/simplices")
+            for path in joinpath.(root, files)
+                if endswith(path,".coxiter")
+                    println("path: $path")
+                    println(is_finite_volume(path))
+                end
+            end
+        end
     end
 
 end
