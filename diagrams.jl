@@ -69,14 +69,14 @@ end
 
 # The degree sequences corresponding to each irreducible diagram types follow:
 
-deg_seq_a1 = deg_seq(Array{Array{Int,1},1}([[]]))
+const deg_seq_a1 = deg_seq(Array{Array{Int,1},1}([[]]))
 deg_seq_a(n::Int) = begin
     @assert n≥2
     2*deg_seq([[3]]) + (n-2)*deg_seq([[3,3]])::DegSeq
 end
 
-deg_seq_b2 = deg_seq([[4],[4]])
-deg_seq_b3 = deg_seq([[4],[4,3],[3]])
+const deg_seq_b2 = deg_seq([[4],[4]])
+const deg_seq_b3 = deg_seq([[4],[4,3],[3]])
 deg_seq_b(n)::DegSeq = begin
     @assert n≥3
     deg_seq([[4]]) + deg_seq([[4,3]]) + (n-3)*deg_seq([[3,3]]) + deg_seq([[3]])
@@ -108,7 +108,7 @@ deg_seq_C(n::Int)::DegSeq = begin
     2*deg_seq([[4,3]]) +  2*deg_seq([[4]])  + (n-4)*deg_seq([[3,3]])
 end
 
-deg_seq_D5 = begin
+const deg_seq_D5 = begin
     deg_seq([[3,3,3,3]]) + 4*deg_seq([[3]])
 end
 deg_seq_D(n::Int)::DegSeq = begin
@@ -117,22 +117,24 @@ deg_seq_D(n::Int)::DegSeq = begin
 end
 
 
-deg_seq_f4 = deg_seq([[3],[3],[3,4],[3,4]])
-deg_seq_F4 = deg_seq([[3],[3],[3,3],[3,4],[3,4]])
-deg_seq_h2 = deg_seq([[5],[5]])
-deg_seq_h3 = deg_seq([[5],[5,3],[3]])
-deg_seq_h4 = deg_seq([[5],[5,3],[3,3],[3]])
-deg_seq_g2 = deg_seq([[6],[6]])
-deg_seq_G2 = deg_seq([[6],[6,3],[3]])
-deg_seq_Iinfty = deg_seq([[0],[0]])
-deg_seq_i(n::Int) = deg_seq([[n],[n]])
+const deg_seq_f4 = deg_seq([[3],[3],[3,4],[3,4]])
+const deg_seq_F4 = deg_seq([[3],[3],[3,3],[3,4],[3,4]])
+const deg_seq_h2 = deg_seq([[5],[5]])
+const deg_seq_h3 = deg_seq([[5],[5,3],[3]])
+const deg_seq_h4 = deg_seq([[5],[5,3],[3,3],[3]])
+const deg_seq_g2 = deg_seq([[6],[6]])
+const deg_seq_G2 = deg_seq([[6],[6,3],[3]])
+const deg_seq_Iinfty = deg_seq([[0],[0]])
+function deg_seq_i(n::Int)::DegSeq
+    deg_seq([[n],[n]])
+end
 
-deg_seq_e6 = deg_seq([[3,3,3],[3,3],[3,3],[3],[3],[3]])
-deg_seq_e7 = deg_seq([[3,3,3],[3,3],[3,3],[3,3],[3],[3],[3]])
-deg_seq_e8 = deg_seq([[3,3,3],[3,3],[3,3],[3,3],[3,3],[3],[3],[3]])
-deg_seq_E6 = deg_seq([[3,3,3],[3,3],[3,3],[3,3],[3],[3],[3]])
-deg_seq_E7 = deg_seq([[3,3,3],[3,3],[3,3],[3,3],[3,3],[3],[3],[3]])
-deg_seq_E8 = deg_seq([[3,3,3],[3,3],[3,3],[3,3],[3,3],[3,3],[3],[3],[3]])
+const deg_seq_e6 = deg_seq([[3,3,3],[3,3],[3,3],[3],[3],[3]])
+const deg_seq_e7 = deg_seq([[3,3,3],[3,3],[3,3],[3,3],[3],[3],[3]])
+const deg_seq_e8 = deg_seq([[3,3,3],[3,3],[3,3],[3,3],[3,3],[3],[3],[3]])
+const deg_seq_E6 = deg_seq([[3,3,3],[3,3],[3,3],[3,3],[3],[3],[3]])
+const deg_seq_E7 = deg_seq([[3,3,3],[3,3],[3,3],[3,3],[3,3],[3],[3],[3]])
+const deg_seq_E8 = deg_seq([[3,3,3],[3,3],[3,3],[3,3],[3,3],[3,3],[3],[3],[3]])
 
 
 
@@ -284,20 +286,20 @@ function build_deg_seq_and_associated_data(VS::Set{Int},D::Array{Int,2})
     end    
     ds = deg_seqs
 
-    center = ( length(collect(keys(deg3_vertices))) > 0 ? collect(keys(deg3_vertices))[1] : nothing )
-    center_neighbors = ( center === nothing ? Set() : deg3_vertices[center] )
-    extremities = Set(keys(deg1_vertices))
-    extremities_neighbors = ( isempty(extremities) ? Set() : ∪(values(deg1_vertices)...) )
+    center::Union{Nothing,Int} = ( length(collect(keys(deg3_vertices))) > 0 ? collect(keys(deg3_vertices))[1] : nothing )
+    center_neighbors::Set{Int} = ( center === nothing ? Set() : deg3_vertices[center] )
+    extremities::Set{Int} = Set(keys(deg1_vertices))
+    extremities_neighbors::Set{Int} = ( isempty(extremities) ? Set() : ∪(values(deg1_vertices)...) )
     
-    return (ds, deg1_vertices, deg3_vertices, center, center_neighbors, extremities, extremities_neighbors)
+    return (ds, deg1_vertices, deg3_vertices, center, center_neighbors, extremities, extremities_neighbors)::Tuple{DegSeq,Dict{Int,Set{Int}},Dict{Int,Set{Int}},Union{Nothing,Int},Set{Int},Set{Int},Set{Int}}
 
 end
 
-function small_connected_non_sporadic_diagram_type(VS::Set{Int},D::Array{Int,2})
+function small_connected_non_sporadic_diagram_type(VS::Set{Int},D::Array{Int,2},deg_seq_and_assoc::Tuple{DegSeq,Dict{Int,Set{Int}},Dict{Int,Set{Int}},Union{Nothing,Int},Set{Int},Set{Int},Set{Int}})
     
     @assert true "The diagram here is assumed connected. maybe this deserves a check"
     
-    (ds, deg1_vertices, deg3_vertices, center, center_neighbors, extremities, extremities_neighbors) = build_deg_seq_and_associated_data(VS,D)
+    (ds, deg1_vertices, deg3_vertices, center, center_neighbors, extremities, extremities_neighbors) = deg_seq_and_assoc # build_deg_seq_and_associated_data(VS,D) 
     
 
     vertices = collect(VS)
@@ -343,12 +345,12 @@ function small_connected_non_sporadic_diagram_type(VS::Set{Int},D::Array{Int,2})
     end    
 end
 
-function small_connected_sporadic_diagram_type(VS::Set{Int},D::Array{Int,2})
+function small_connected_sporadic_diagram_type(VS::Set{Int},D::Array{Int,2},deg_seq_and_assoc::Tuple{DegSeq,Dict{Int,Set{Int}},Dict{Int,Set{Int}},Union{Nothing,Int},Set{Int},Set{Int},Set{Int}})
 
     @assert true "The diagram here is assumed connected. maybe this deserves a check"
 
 
-    (ds, deg1_vertices, deg3_vertices, center, center_neighbors, extremities, extremities_neighbors) = build_deg_seq_and_associated_data(VS,D)
+    (ds, deg1_vertices, deg3_vertices, center, center_neighbors, extremities, extremities_neighbors) = deg_seq_and_assoc # build_deg_seq_and_associated_data(VS,D) 
 
 
     VS = collect(VS)
@@ -448,12 +450,13 @@ function try_extend(VS::Set{Int},S::InducedSubDiagram,D::Array{Int,2},v::Int)
     vertices::Set{Int} = ∪(Set(),[Set(c.vertices)::Set{Int} for c in neighboring_components]...)
     push!(vertices,v)
 
+    deg_seq_and_assoc = build_deg_seq_and_associated_data(vertices,D)
 
     if joined === nothing && total_size ≤ 9 
-        joined = small_connected_sporadic_diagram_type(vertices,D) 
+        joined = small_connected_sporadic_diagram_type(vertices,D,deg_seq_and_assoc) 
     end
     if joined === nothing && !only_sporadic
-        joined = small_connected_non_sporadic_diagram_type(vertices,D)
+        joined = small_connected_non_sporadic_diagram_type(vertices,D,deg_seq_and_assoc)
     end
     
 
