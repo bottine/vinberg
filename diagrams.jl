@@ -38,8 +38,13 @@ include("diagram_matrices.jl")
     DT_Iinfty
 end
 
-is_spherical(dt::DiagramType) = dt ∈ Set([DT_a,DT_b,DT_d,DT_e6,DT_e7,DT_e8,DT_f4,DT_g2,DT_h2,DT_h3,DT_h4,DT_in])
-is_affine(dt::DiagramType) = dt ∈ Set([DT_A,DT_B,DT_C,DT_D,DT_E6,DT_E7,DT_E8,DT_F4,DT_G2,DT_Iinfty])
+
+function is_spherical(dt::DiagramType)::Bool
+    dt ∈ Set([DT_a,DT_b,DT_d,DT_e6,DT_e7,DT_e8,DT_f4,DT_g2,DT_h2,DT_h3,DT_h4,DT_in])
+end
+function is_affine(dt::DiagramType)::Bool
+    dt ∈ Set([DT_A,DT_B,DT_C,DT_D,DT_E6,DT_E7,DT_E8,DT_F4,DT_G2,DT_Iinfty])
+end
 
 struct ConnectedInducedSubDiagram
     vertices::Array{Int,1}
@@ -57,16 +62,30 @@ card(c::ConnectedInducedSubDiagram) = length(c.vertices)
 
 struct InducedSubDiagram
     connected_components::Set{ConnectedInducedSubDiagram}
-end 
+    is_affine::Bool
+    is_spherical::Bool
+end
+
+function InducedSubDiagram(connected_components::Set{ConnectedInducedSubDiagram})
+    this_is_affine = all(is_affine(c.type) for c in connected_components) 
+    this_is_spherical = all(is_spherical(c.type) for c in connected_components) 
+    
+    @assert ! (length(connected_components) > 0 && this_is_affine && this_is_spherical) "A diagram can't both be spherical and affine."
+    
+    return InducedSubDiagram(connected_components, this_is_affine, this_is_spherical) 
+end
 
 function the_empty_isd() 
-    return InducedSubDiagram(Set())
+    return InducedSubDiagram(Set{ConnectedInducedSubDiagram}())
 end
 
 
 struct DiagramAndSubs 
     D::Array{Int,(2)}
     subs::Dict{Set{Int},(InducedSubDiagram)}
+# WIP   ordered_subs::Dict{Set{Int},(InducedSubDiagram,Set{Set{Int}},Set{Set{Int}})}
+# WIP   affine_subs_of_card::Array{Set{Set{Int}},1}
+# WIP   spherical_subs_of_card::Array{Set{Set{Int}},1}
 end
 
 
@@ -77,7 +96,7 @@ function print_DAS(das::DiagramAndSubs)
     println()
     println("and the subdiagrams are:")
     for (sub_support, sub_diagram) in das.subs
-        println("$(collect(sub_support)) [affine=$(is_affine(sub_diagram)),spherical=$(is_spherical(sub_diagram))]:")
+        println("$(collect(sub_support)) [affine=$(sub_diagram.is_affine),spherical=$(sub_diagram.is_spherical)]:")
         for component in sub_diagram.connected_components
             println("    $(component.type) : $(component.vertices)")
         end
@@ -85,6 +104,17 @@ function print_DAS(das::DiagramAndSubs)
     println("***********************")
 
 end
+
+# WIP
+#function is_finite_volume2(das::DiagramAndSubs,n::Int)
+#    
+#    for support in das.affine_subs_of_card[n] ∪ das.spherical_subs_of_card[n]
+#        num_affine_extensions = length(das.ordered_subs[2][support]) 
+#        num_spherical_extensions = length(das.ordered_subs[3][support])
+#        if num # TODO
+#    end
+#
+#end
 
 function is_finite_volume(path::String)
     
@@ -101,14 +131,14 @@ function is_finite_volume(path::String)
         if D === nothing || rank === nothing
             println("Error reading file probably")
         else
-            return is_finite_volume(build_diagram_and_subs(D),rank)
+            return is_finite_volume(build_diagram_and_subs(D;max_card=rank),rank)
         end
     end
 
 
 end
 
-function is_compact_or_finite_volume(dag::DiagramAndSubs,n::Int)
+function is_finite_volume(dag::DiagramAndSubs,n::Int)
     # Has spherical/parabolic diagram of rank n-1
     has_spherical_sub_of_rank_n = false
     has_affine_sub_of_rank_n_minus_1 = false
@@ -362,7 +392,7 @@ function try_extend(VS::Set{Int},S::InducedSubDiagram,D::Array{Int,2},v::Int)
     else
         new_components = non_neighboring_components; 
         push!(new_components,joined)
-        return InducedSubDiagram(Set(new_components))
+        return InducedSubDiagram(Set{ConnectedInducedSubDiagram}(new_components))
     end
 
 end
@@ -371,17 +401,14 @@ end
 is_affine(isd::InducedSubDiagram) = all(is_affine(c.type) for c in isd.connected_components)
 is_spherical(isd::InducedSubDiagram) = all(is_spherical(c.type) for c in isd.connected_components)
 
-function extend(DAS::DiagramAndSubs, v::Array{Int,1})
-    
-
+function extend(DAS::DiagramAndSubs, v::Array{Int,1};max_card::Union{Nothing,Int}=nothing)
+  
     D = DAS.D
     subs = DAS.subs
 
     n = length(v) 
     @assert size(D) == (n,n)
     
-    println("Extending with $n")
-
     # Extend D with v
     D = [D v]
     D = [D; [v;1]']
@@ -390,9 +417,13 @@ function extend(DAS::DiagramAndSubs, v::Array{Int,1})
 
     new_subs::Dict{Set{Int},InducedSubDiagram} = Dict()
     for (V,S) in subs
-        S_and_v = try_extend(V,S,D,new_vertex)
-        if S_and_v ≠ nothing 
-            push!(new_subs,(V∪Set([new_vertex])) => S_and_v)
+        if !isnothing(max_card) && length(V) ≤ max_card - 1
+            S_and_v = try_extend(V,S,D,new_vertex)
+            if S_and_v ≠ nothing 
+                push!(new_subs,(V∪Set([new_vertex])) => S_and_v)
+            end
+        else
+            # means the subdiagram is too big and we don't care (because it won't matter for finite volume/cocompactness verification) 
         end
     end
     return DiagramAndSubs(D,merge(subs,new_subs))
@@ -400,7 +431,7 @@ function extend(DAS::DiagramAndSubs, v::Array{Int,1})
 end
 
 
-function build_diagram_and_subs(M::Array{Int,2})
+function build_diagram_and_subs(M::Array{Int,2};max_card::Union{Nothing,Int}=nothing)
     n = size(M,1)
     @assert size(M) == (n,n)
     # @assert issymetric(M)
@@ -410,7 +441,7 @@ function build_diagram_and_subs(M::Array{Int,2})
 
     DAS = DiagramAndSubs(reshape([],0,0),lol)
     for i in 1:n
-        DAS = extend(DAS,M[i,1:i-1]) 
+        DAS = extend(DAS,M[i,1:i-1];max_card=max_card) 
     end
     return DAS
 end
@@ -427,7 +458,7 @@ end
 function check_all_graphs()
     
 
-    for (root, dirs, files) in walkdir("./graphs/")
+    for (root, dirs, files) in walkdir("./graphs/simplices")
         for path in joinpath.(root, files)
             if endswith(path,".coxiter")
                 println("path: $path")
