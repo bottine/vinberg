@@ -5,7 +5,7 @@ using Colors
 using Multisets
 using Memoize
 
-
+import Base.push!, Base.length
 
 function gug_coxiter_path_to_matrix(path)
     s = open(path) do file
@@ -108,20 +108,47 @@ end
 
 
 
-MS = Multiset
 
 # Degree Sequence: Each vertex has an associated "multi-degree" which is a multiset containing the labels of edges incident to the vertex
 # A DegSeq is the multiset of the mult-degrees associated to the vertices of a diagram
-DegSeq = MS{MS{Int}}
+mutable struct DegSeq 
+    content::Vector{Vector{Int}}
+end
+
+function Base.push!(ds::DegSeq,v::Vector{Int})
+    @assert length(v) ≤ 4
+    push!(ds.content,sort(v,rev=true))
+    sort!(ds.content,rev=true)
+    return ds
+end
+
+function Base.:+(ds1::DegSeq,ds2::DegSeq)
+    DegSeq(sort(vcat(ds1.content,ds2.content),rev=true))
+end
+
+function Base.:*(k::Int,ds::DegSeq)
+    @assert k≥0
+    DegSeq(reduce(vcat,[[v for i in 1:k] for v in ds.content]))
+end
+
+function Base.length(ds::DegSeq)
+    length(ds.content)
+end
+
+function Base.:(==)(ds1::DegSeq,ds2::DegSeq)
+    (ds1.content == ds2.content)
+end
 
 # Given an array of arrays of ints, returns the associated degree sequence
-function deg_seq(vv::Array{Array{Int,1},1})
-    return MS(MS.(vv))::DegSeq
+function deg_seq(vv::Vector{Vector{Int}})
+    @assert all(length(v) ≤ 4 for v in vv)
+    sorted_vv = [sort(v,rev=true) for v in vv]
+    return DegSeq(sort(vv,rev=true))
 end
 
 # The degree sequences corresponding to each irreducible diagram types follow:
 
-const deg_seq_a1 = deg_seq(Array{Array{Int,1},1}([[]]))
+const deg_seq_a1 = deg_seq(Vector{Vector{Int}}([[]]))
 deg_seq_a(n::Int) = begin
     @assert n≥2
     2*deg_seq([[3]]) + (n-2)*deg_seq([[3,3]])::DegSeq
@@ -145,7 +172,7 @@ deg_seq_A(n::Int)::DegSeq = begin
 end
 
 deg_seq_B4 = begin
-    deg_seq([[3,3,4]]) + 2*deg_seq([[3]]) + deg_seq([[4]])
+    deg_seq([[3,3,4],]) + 2*deg_seq([[3],]) + deg_seq([[4],])
 end
 
 deg_seq_B(n::Int)::DegSeq = begin
@@ -315,12 +342,12 @@ end
     deg1_vertices = Dict{Int,BitSet}()
     deg3_vertices = Dict{Int,BitSet}()
     
-    deg_seqs = MS{MS{Int}}()
+    deg_seqs::DegSeq = deg_seq(Vector{Vector{Int}}()) 
     for v in VS
 
         @debug "looking at $v"
 
-        deg_seq_v = MS{Int}()
+        deg_seq_v = Vector{Int}() 
         simple_neighbors_v = BitSet()
         for u in VS if u ≠ v
             if D[u,v] == 3
@@ -330,9 +357,9 @@ end
                 push!(deg_seq_v,D[u,v])
             end
         end end
-        if deg_seq_v == MS([3,3,3])
+        if deg_seq_v == [3,3,3]
             push!(deg3_vertices,v => simple_neighbors_v)
-        elseif deg_seq_v == MS([3])
+        elseif deg_seq_v == [3]
             push!(deg1_vertices,v => simple_neighbors_v)
         end
         push!(deg_seqs, deg_seq_v)
@@ -340,6 +367,7 @@ end
         @debug "$v has deg_seq = $deg_seq_v"
     end    
     ds = deg_seqs
+    
 
     center::Union{Nothing,Int} = ( length(collect(keys(deg3_vertices))) > 0 ? collect(keys(deg3_vertices))[1] : nothing )
     center_neighbors::BitSet = ( center === nothing ? BitSet() : deg3_vertices[center] )
@@ -428,7 +456,7 @@ function small_connected_sporadic_diagram_type(VS::BitSet,D::Array{Int,2},deg_se
         return CISD(VS,DT_G2)
     elseif ds == deg_seq_Iinfty
         return CISD(VS,DT_Iinfty)
-    elseif length(ds) ≥ 1 && length(first(ds)) ≥ 1 && first(first(ds)) ≥ 6 && ds == deg_seq_i(first(first(ds)))
+    elseif length(ds) ≥ 1 && length(ds.content[1]) ≥ 1 && ds.content[1][1] ≥ 6 && ds == deg_seq_i(ds.content[1][1])
         return CISD(VS,DT_in)
 
 
