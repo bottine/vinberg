@@ -286,7 +286,36 @@ function print_das(das::DiagramAndSubs)
 
 end
 
+ function is_compact(dag::DiagramAndSubs,n::Int)
+    # Has spherical/parabolic diagram of rank n-1
+    has_spherical_sub_of_rank_n = false
 
+    subs = dag.subs
+
+    for (support, subdiagram) in subs
+        
+        if length(support) == n && is_spherical(subdiagram)
+            has_spherical_sub_of_rank_n = true
+        end
+
+        if length(support) == n-1 && is_spherical(subdiagram)
+            extensions = [
+                ext_support for (ext_support, ext_subdiagram) in subs if 
+                support < ext_support && length(ext_support) == n && is_spherical(ext_subdiagram)
+            ]
+            if length(extensions) ≠ 2
+                @debug "the subdiagram of support $support has $(length(extensions)) affine/spherical extensions"
+                return false
+            end
+        end
+    
+    end
+    
+    @debug "has_spherical_sub_of_rank_n = $has_spherical_sub_of_rank_n"
+
+    return has_spherical_sub_of_rank_n
+
+end
 
 function is_finite_volume(dag::DiagramAndSubs,n::Int)
     # Has spherical/parabolic diagram of rank n-1
@@ -613,8 +642,7 @@ end
 # ##########################
 #
 
-
-function is_finite_volume(path::String)
+function is_compact_respectively_finvol(path::String)
     
     # Get file content in s as in https://en.wikibooks.org/wiki/Introducing_Julia/Working_with_text_files
     s = open(path) do file
@@ -629,7 +657,8 @@ function is_finite_volume(path::String)
         if D === nothing || rank === nothing
             println("Error reading file probably")
         else
-            return is_finite_volume(build_diagram_and_subs(D;max_card=rank),rank)
+            das = build_diagram_and_subs(D;max_card=rank)
+            return (is_compact(das, rank), is_finite_volume(das, rank))
         end
     end
 
@@ -637,14 +666,15 @@ function is_finite_volume(path::String)
 end
 
 
-function check_all_graphs()
+
+function check_all_graphs(sub_directory="")
     
 
-    for (root, dirs, files) in walkdir("./graphs/")
+    for (root, dirs, files) in walkdir("./graphs/"*sub_directory)
         for path in joinpath.(root, files)
             if endswith(path,".coxiter")
                 println("path: $path")
-                println(is_finite_volume(path))
+                println(is_compact_respectively_finvol(path))
             end
         end
     end
@@ -663,7 +693,7 @@ function check_some_graphs()
             for path in joinpath.(root, files)
                 if endswith(path,".coxiter")
                     println("path: $path")
-                    println(is_finite_volume(path))
+                    println(is_compact_respectively_finvol(path))
                 end
             end
         end
