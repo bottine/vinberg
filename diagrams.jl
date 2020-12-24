@@ -3,9 +3,61 @@ using LightGraphs
 using GraphPlot
 using Colors
 using Multisets
+using Memoize
 
 
-include("diagram_matrices.jl")
+
+function gug_coxiter_path_to_matrix(path)
+    s = open(path) do file
+        read(file, String)
+    end
+
+    return gug_coxiter_to_matrix(s)
+end
+
+function gug_coxiter_to_matrix(descr)
+   
+    lines = split(descr,"\n")
+    @assert length(lines) ≥ 2 "CoxIter graph description must have non trivial content!"
+    
+    num_vertices = nothing
+    rank = nothing
+    m = match(r"^(?<num_vertices>\d\d*)\s\s*(?<rank>\d\d*)$", lines[1])
+    if m === nothing
+        println("can't match first line:")
+        println(lines[1])
+        return nothing 
+    end
+
+    num_vertices = parse(Int,m[:num_vertices])
+    rank = parse(Int,m[:rank])
+    
+    D = fill(2,num_vertices,num_vertices)
+    for i in 1:num_vertices
+        D[i,i] = 1
+    end
+    
+    for line in lines[2:end]
+        m = match(r"^(?<from>\d\d*)\s\s*(?<to>\d\d*)\s\s*(?<label>\d\d*)$", line)
+        if m === nothing
+            continue
+        end
+        from = parse(Int,m[:from])
+        to = parse(Int,m[:to])
+        label = parse(Int,m[:label])
+      
+        if from ≠ to && from ∈ 1:num_vertices && to ∈ 1:num_vertices
+            D[from,to] = label
+            D[to,from] = label
+        end
+
+    end
+    
+    return D, rank
+
+end
+
+
 
 
 # Referring to https://en.wikipedia.org/wiki/Coxeter%E2%80%93Dynkin_diagram
@@ -144,12 +196,15 @@ const deg_seq_E8 = deg_seq([[3,3,3],[3,3],[3,3],[3,3],[3,3],[3,3],[3],[3],[3]])
 # connected = irreducible
 # We store the vertices and the type
 struct ConnectedInducedSubDiagram
-    vertices::Array{Int,1}
+    vertices::BitSet
     type::DiagramType
 end
 
-function CISD(vertices,type)
+function CISD(vertices::BitSet,type)
     ConnectedInducedSubDiagram(vertices,type)
+end
+function CISD(vertices::Array{Int,1},type)
+    ConnectedInducedSubDiagram(BitSet(vertices),type)
 end
 
 
@@ -157,7 +212,7 @@ card(c::ConnectedInducedSubDiagram) = length(c.vertices)
 
 is_empty(c::ConnectedInducedSubDiagram) = length(c.vertices) == 0
 
-the_singleton(v::Int) = CISD([v],DT_a)
+the_singleton(v::Int) = CISD(BitSet(v),DT_a)
 
 
 # An arbitrary induced subdiagram
@@ -184,7 +239,7 @@ end
 
 struct DiagramAndSubs 
     D::Array{Int,(2)}
-    subs::Dict{Set{Int},InducedSubDiagram}
+    subs::Dict{BitSet,InducedSubDiagram}
 end
 
 
@@ -248,7 +303,7 @@ function is_finite_volume(dag::DiagramAndSubs,n::Int)
 end
 
 
-function build_deg_seq_and_associated_data(VS::Set{Int},D::Array{Int,2})
+@memoize Dict function build_deg_seq_and_associated_data(VS::BitSet,D::Array{Int,2})
 
     @assert true "The diagram here is assumed connected. maybe this deserves a check"
 
@@ -257,8 +312,8 @@ function build_deg_seq_and_associated_data(VS::Set{Int},D::Array{Int,2})
 
     VSC = length(VS)
     
-    deg1_vertices = Dict{Int,Set{Int}}()
-    deg3_vertices = Dict{Int,Set{Int}}()
+    deg1_vertices = Dict{Int,BitSet}()
+    deg3_vertices = Dict{Int,BitSet}()
     
     deg_seqs = MS{MS{Int}}()
     for v in VS
@@ -266,7 +321,7 @@ function build_deg_seq_and_associated_data(VS::Set{Int},D::Array{Int,2})
         @debug "looking at $v"
 
         deg_seq_v = MS{Int}()
-        simple_neighbors_v = Set{Int}()
+        simple_neighbors_v = BitSet()
         for u in VS if u ≠ v
             if D[u,v] == 3
                 push!(simple_neighbors_v,u)
@@ -287,22 +342,22 @@ function build_deg_seq_and_associated_data(VS::Set{Int},D::Array{Int,2})
     ds = deg_seqs
 
     center::Union{Nothing,Int} = ( length(collect(keys(deg3_vertices))) > 0 ? collect(keys(deg3_vertices))[1] : nothing )
-    center_neighbors::Set{Int} = ( center === nothing ? Set() : deg3_vertices[center] )
-    extremities::Set{Int} = Set(keys(deg1_vertices))
-    extremities_neighbors::Set{Int} = ( isempty(extremities) ? Set() : ∪(values(deg1_vertices)...) )
+    center_neighbors::BitSet = ( center === nothing ? BitSet() : deg3_vertices[center] )
+    extremities::BitSet = BitSet(keys(deg1_vertices))
+    extremities_neighbors::BitSet = ( isempty(extremities) ? BitSet() : ∪(values(deg1_vertices)...) )
     
-    return (ds, deg1_vertices, deg3_vertices, center, center_neighbors, extremities, extremities_neighbors)::Tuple{DegSeq,Dict{Int,Set{Int}},Dict{Int,Set{Int}},Union{Nothing,Int},Set{Int},Set{Int},Set{Int}}
+    return (ds, deg1_vertices, deg3_vertices, center, center_neighbors, extremities, extremities_neighbors)::Tuple{DegSeq,Dict{Int,BitSet},Dict{Int,BitSet},Union{Nothing,Int},BitSet,BitSet,BitSet}
 
 end
 
-function small_connected_non_sporadic_diagram_type(VS::Set{Int},D::Array{Int,2},deg_seq_and_assoc::Tuple{DegSeq,Dict{Int,Set{Int}},Dict{Int,Set{Int}},Union{Nothing,Int},Set{Int},Set{Int},Set{Int}})
+function small_connected_non_sporadic_diagram_type(VS::BitSet,D::Array{Int,2},deg_seq_and_assoc::Tuple{DegSeq,Dict{Int,BitSet},Dict{Int,BitSet},Union{Nothing,Int},BitSet,BitSet,BitSet})
     
     @assert true "The diagram here is assumed connected. maybe this deserves a check"
     
     (ds, deg1_vertices, deg3_vertices, center, center_neighbors, extremities, extremities_neighbors) = deg_seq_and_assoc # build_deg_seq_and_associated_data(VS,D) 
     
 
-    vertices = collect(VS)
+    vertices = VS
     n = length(vertices)
 
     if false
@@ -345,7 +400,7 @@ function small_connected_non_sporadic_diagram_type(VS::Set{Int},D::Array{Int,2},
     end    
 end
 
-function small_connected_sporadic_diagram_type(VS::Set{Int},D::Array{Int,2},deg_seq_and_assoc::Tuple{DegSeq,Dict{Int,Set{Int}},Dict{Int,Set{Int}},Union{Nothing,Int},Set{Int},Set{Int},Set{Int}})
+function small_connected_sporadic_diagram_type(VS::BitSet,D::Array{Int,2},deg_seq_and_assoc::Tuple{DegSeq,Dict{Int,BitSet},Dict{Int,BitSet},Union{Nothing,Int},BitSet,BitSet,BitSet})
 
     @assert true "The diagram here is assumed connected. maybe this deserves a check"
 
@@ -353,8 +408,6 @@ function small_connected_sporadic_diagram_type(VS::Set{Int},D::Array{Int,2},deg_
     (ds, deg1_vertices, deg3_vertices, center, center_neighbors, extremities, extremities_neighbors) = deg_seq_and_assoc # build_deg_seq_and_associated_data(VS,D) 
 
 
-    VS = collect(VS)
-    
     if false
         @assert false "For alignment's sake"
       
@@ -397,7 +450,7 @@ function small_connected_sporadic_diagram_type(VS::Set{Int},D::Array{Int,2},deg_
 
 end
 
-function try_extend(VS::Set{Int},S::InducedSubDiagram,D::Array{Int,2},v::Int)
+function try_extend(VS::BitSet,S::InducedSubDiagram,D::Array{Int,2},v::Int)
     components = S.connected_components
     
     # joined should/will be of type ConnectedInducedSubDiagram
@@ -405,15 +458,17 @@ function try_extend(VS::Set{Int},S::InducedSubDiagram,D::Array{Int,2},v::Int)
     
     # special case, no component in S, so we just return the singleton
     if length(components) == 0
-        joined = the_singleton(v)
-        return InducedSubDiagram(Set([joined]))
+        joined = the_singleton(v)::ConnectedInducedSubDiagram
+        only_joined = Set{ConnectedInducedSubDiagram}()::Set{ConnectedInducedSubDiagram}
+        push!(only_joined, joined)
+        return InducedSubDiagram(only_joined)
     end
     
     freedom = 4
 
-    neighboring_components::Set{ConnectedInducedSubDiagram} = Set()
-    neighboring_components_size::Set{Int} = Set()
-    non_neighboring_components::Set{ConnectedInducedSubDiagram} = Set()
+    neighboring_components::Set{ConnectedInducedSubDiagram} = BitSet()
+    neighboring_components_size::BitSet = BitSet()
+    non_neighboring_components::Set{ConnectedInducedSubDiagram} = BitSet()
 
     total_size::Int = 1
     only_sporadic::Bool = false
@@ -447,7 +502,7 @@ function try_extend(VS::Set{Int},S::InducedSubDiagram,D::Array{Int,2},v::Int)
     end
 
     
-    vertices::Set{Int} = ∪(Set(),[Set(c.vertices)::Set{Int} for c in neighboring_components]...)
+    vertices::BitSet = ∪(BitSet(),[c.vertices for c in neighboring_components]...)
     push!(vertices,v)
 
     deg_seq_and_assoc = build_deg_seq_and_associated_data(vertices,D)
@@ -488,12 +543,12 @@ function extend(das::DiagramAndSubs, v::Array{Int,1}; max_card::Union{Nothing,In
    
     new_vertex = n+1
 
-    new_subs::Dict{Set{Int},InducedSubDiagram} = Dict{Set{Int},InducedSubDiagram}()
+    new_subs::Dict{BitSet,InducedSubDiagram} = Dict{BitSet,InducedSubDiagram}()
     for (V,S) in subs
         if !isnothing(max_card) && length(V) ≤ max_card - 1
             S_and_v = try_extend(V,S,D,new_vertex)
             if S_and_v ≠ nothing 
-                push!(new_subs,(V∪Set([new_vertex])) => S_and_v)
+                push!(new_subs,(V∪BitSet(new_vertex)) => S_and_v)
             end
         else
             # means the subdiagram is too big and we don't care (because it won't matter for finite volume/cocompactness verification) 
@@ -511,8 +566,8 @@ function build_diagram_and_subs(M::Array{Int,2};max_card::Union{Nothing,Int}=not
     @assert M == M' "M must be symmetric"
     @assert all(l ≥ 0 for l in M) "M must have non-negative entries"
 
-    subs = Dict{Set{Int},InducedSubDiagram}()
-    push!(subs,Set{Int}() => the_empty_isd())
+    subs = Dict{BitSet,InducedSubDiagram}()
+    push!(subs,BitSet() => the_empty_isd())
 
     das = DiagramAndSubs(reshape([],0,0),subs)
     for i in 1:n
