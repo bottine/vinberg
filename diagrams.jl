@@ -407,7 +407,7 @@ end
 
 end
 
-function small_connected_non_sporadic_diagram_type(VS::BitSet,D::Array{Int,2},deg_seq_and_assoc::Tuple{DegSeq,Dict{Int,BitSet},Dict{Int,BitSet},Union{Nothing,Int},BitSet,BitSet,BitSet})
+function connected_non_sporadic_diagram_type(VS::BitSet,D::Array{Int,2},deg_seq_and_assoc::Tuple{DegSeq,Dict{Int,BitSet},Dict{Int,BitSet},Union{Nothing,Int},BitSet,BitSet,BitSet})
     
     @assert true "The diagram here is assumed connected. maybe this deserves a check"
     
@@ -457,7 +457,7 @@ function small_connected_non_sporadic_diagram_type(VS::BitSet,D::Array{Int,2},de
     end    
 end
 
-function small_connected_sporadic_diagram_type(VS::BitSet,D::Array{Int,2},deg_seq_and_assoc::Tuple{DegSeq,Dict{Int,BitSet},Dict{Int,BitSet},Union{Nothing,Int},BitSet,BitSet,BitSet})
+function connected_sporadic_diagram_type(VS::BitSet,D::Array{Int,2},deg_seq_and_assoc::Tuple{DegSeq,Dict{Int,BitSet},Dict{Int,BitSet},Union{Nothing,Int},BitSet,BitSet,BitSet})
 
     @assert true "The diagram here is assumed connected. maybe this deserves a check"
 
@@ -565,10 +565,10 @@ function try_extend(VS::BitSet,S::InducedSubDiagram,D::Array{Int,2},v::Int)
     deg_seq_and_assoc = build_deg_seq_and_associated_data(vertices,D)
 
     if joined === nothing && total_size ≤ 9 
-        joined = small_connected_sporadic_diagram_type(vertices,D,deg_seq_and_assoc) 
+        joined = connected_sporadic_diagram_type(vertices,D,deg_seq_and_assoc) 
     end
     if joined === nothing && !only_sporadic
-        joined = small_connected_non_sporadic_diagram_type(vertices,D,deg_seq_and_assoc)
+        joined = connected_non_sporadic_diagram_type(vertices,D,deg_seq_and_assoc)
     end
     
 
@@ -687,7 +687,7 @@ function check_some_graphs()
     @time begin
         for path in ["graphs/13-mcl11.coxiter"] 
                 println("path: $path")
-                println(is_finite_volume(path))
+                println(is_compact_respectively_finvol(path))
         end
         for (root, dirs, files) in walkdir("./graphs/simplices")
             for path in joinpath.(root, files)
