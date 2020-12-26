@@ -117,13 +117,13 @@ end
 
 function Base.push!(ds::DegSeq,v::Vector{Int})
     @assert length(v) ≤ 4
-    push!(ds.content,sort(v,rev=true))
-    sort!(ds.content,rev=true)
+    push!(ds.content,sort(v))
+    sort!(ds.content)
     return ds
 end
 
 function Base.:+(ds1::DegSeq,ds2::DegSeq)
-    DegSeq(sort(vcat(ds1.content,ds2.content),rev=true))
+    DegSeq(sort(vcat(ds1.content,ds2.content)))
 end
 
 function Base.:*(k::Int,ds::DegSeq)
@@ -142,8 +142,8 @@ end
 # Given an array of arrays of ints, returns the associated degree sequence
 function deg_seq(vv::Vector{Vector{Int}})
     @assert all(length(v) ≤ 4 for v in vv)
-    sorted_vv = [sort(v,rev=true) for v in vv]
-    return DegSeq(sort(vv,rev=true))
+    sorted_vv = [sort(v) for v in vv]
+    return DegSeq(sort(sorted_vv))
 end
 
 # The degree sequences corresponding to each irreducible diagram types follow:
@@ -359,6 +359,29 @@ function is_finite_volume(dag::DiagramAndSubs,n::Int)
 end
 
 
+Arg = Tuple{BitSet,Array{Int,2},Bool}
+Base.hash(a::Arg, h::UInt) = hash(a[2], hash(a[1], hash(:Arg, h)))
+Base.isequal(a::Arg, b::Arg) = Base.isequal(hash(a), hash(b))
+
+
+@memoize Dict function connected_diagram_type(VS::BitSet,D::Array{Int,2}; only_sporadic::Bool=false)
+    
+    @assert true "The diagram here is assumed connected. maybe this deserves a check"
+    
+
+    deg_seq_and_assoc = build_deg_seq_and_associated_data(VS,D)
+    
+    joined = nothing
+    if  length(VS) ≤ 9 
+        joined = connected_sporadic_diagram_type(VS,D,deg_seq_and_assoc) 
+    end
+    if joined === nothing && !only_sporadic
+        joined = connected_non_sporadic_diagram_type(VS,D,deg_seq_and_assoc)
+    end
+    
+    return joined
+end
+
 @memoize Dict function build_deg_seq_and_associated_data(VS::BitSet,D::Array{Int,2})
 
     @assert true "The diagram here is assumed connected. maybe this deserves a check"
@@ -397,6 +420,9 @@ end
     end    
     ds = deg_seqs
     
+    @debug "deg_seq is $ds versus"
+    @debug "           $deg_seq_f4"
+    @debug "end of build_deg_seq…"
 
     center::Union{Nothing,Int} = ( length(collect(keys(deg3_vertices))) > 0 ? collect(keys(deg3_vertices))[1] : nothing )
     center_neighbors::BitSet = ( center === nothing ? BitSet() : deg3_vertices[center] )
@@ -559,18 +585,9 @@ function try_extend(VS::BitSet,S::InducedSubDiagram,D::Array{Int,2},v::Int)
     end
 
     
-    vertices::BitSet = ∪(BitSet(),[c.vertices for c in neighboring_components]...)
-    push!(vertices,v)
+    vertices::BitSet = ∪(BitSet(v),[c.vertices for c in neighboring_components]...)
 
-    deg_seq_and_assoc = build_deg_seq_and_associated_data(vertices,D)
-
-    if joined === nothing && total_size ≤ 9 
-        joined = connected_sporadic_diagram_type(vertices,D,deg_seq_and_assoc) 
-    end
-    if joined === nothing && !only_sporadic
-        joined = connected_non_sporadic_diagram_type(vertices,D,deg_seq_and_assoc)
-    end
-    
+    joined = connected_diagram_type(vertices,D;only_sporadic=only_sporadic)
 
     if joined === nothing
         return nothing
@@ -657,7 +674,7 @@ function is_compact_respectively_finvol(path::String)
         if D === nothing || rank === nothing
             println("Error reading file probably")
         else
-            das = build_diagram_and_subs(D;max_card=rank)
+            das = build_diagram_and_subs(D;max_card=rank+1)
             return (is_compact(das, rank), is_finite_volume(das, rank))
         end
     end
