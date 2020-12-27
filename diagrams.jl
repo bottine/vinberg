@@ -4,6 +4,9 @@ using GraphPlot
 using Colors
 using Multisets
 using Memoize
+using StaticArrays
+
+# TODO make efficient enough to run on ./graphs/18-vinb14_gamma2.coxiter in a short time
 
 import Base.push!, Base.length
 
@@ -106,18 +109,37 @@ end
 
 
 
+#0 -> ()
+#1 -> (3)
+#2 -> (3,3)
+#3 -> (3,3,3)
+#4 -> (3,3,3,3)
+#5 -> (4)
+#6 -> (4,3)
+#7 -> (4,3,3)
+#8 -> (4,4)
+#
+
+Deg = Int
 
 
 
 # Degree Sequence: Each vertex has an associated "multi-degree" which is a multiset containing the labels of edges incident to the vertex
 # A DegSeq is the multiset of the mult-degrees associated to the vertices of a diagram
 mutable struct DegSeq 
-    content::Vector{Vector{Int}}
+    content::Vector{SVector{4,Int}}
+end
+
+function short_vec_to_svec(v::Vector{Int})::SVector{4,Int}
+    @assert length(v) ≤ 4
+    filled = vcat(v, fill(2,(4-length(v),1)))
+    return SVector{4,Int}(filled)
+
 end
 
 function Base.push!(ds::DegSeq,v::Vector{Int})
     @assert length(v) ≤ 4
-    push!(ds.content,sort(v))
+    push!(ds.content,sort(short_vec_to_svec(v)))
     sort!(ds.content)
     return ds
 end
@@ -142,7 +164,7 @@ end
 # Given an array of arrays of ints, returns the associated degree sequence
 function deg_seq(vv::Vector{Vector{Int}})
     @assert all(length(v) ≤ 4 for v in vv)
-    sorted_vv = [sort(v) for v in vv]
+    sorted_vv = [sort(short_vec_to_svec(v)) for v in vv]
     return DegSeq(sort(sorted_vv))
 end
 
@@ -245,12 +267,12 @@ the_singleton(v::Int) = CISD(BitSet(v),DT_a)
 # An arbitrary induced subdiagram
 # Stored as a collection of its irreducible components, plus whether it is affine or spherical
 struct InducedSubDiagram
-    connected_components::Set{ConnectedInducedSubDiagram}
+    connected_components::Vector{ConnectedInducedSubDiagram}
     is_affine::Bool
     is_spherical::Bool
 end
 
-function InducedSubDiagram(connected_components::Set{ConnectedInducedSubDiagram})
+function InducedSubDiagram(connected_components::Vector{ConnectedInducedSubDiagram})
     this_is_affine = all(is_affine(c.type) for c in connected_components) 
     this_is_spherical = all(is_spherical(c.type) for c in connected_components) 
     
@@ -260,7 +282,7 @@ function InducedSubDiagram(connected_components::Set{ConnectedInducedSubDiagram}
 end
 
 function the_empty_isd() 
-    return InducedSubDiagram(Set{ConnectedInducedSubDiagram}())
+    return InducedSubDiagram(Vector{ConnectedInducedSubDiagram}())
 end
 
 
@@ -382,7 +404,7 @@ Base.isequal(a::Arg, b::Arg) = Base.isequal(hash(a), hash(b))
     return joined
 end
 
-@memoize Dict function build_deg_seq_and_associated_data(VS::BitSet,D::Array{Int,2})
+function build_deg_seq_and_associated_data(VS::BitSet,D::Array{Int,2})
 
     @assert true "The diagram here is assumed connected. maybe this deserves a check"
 
@@ -542,16 +564,16 @@ function try_extend(VS::BitSet,S::InducedSubDiagram,D::Array{Int,2},v::Int)
     # special case, no component in S, so we just return the singleton
     if length(components) == 0
         joined = the_singleton(v)::ConnectedInducedSubDiagram
-        only_joined = Set{ConnectedInducedSubDiagram}()::Set{ConnectedInducedSubDiagram}
+        only_joined = Vector{ConnectedInducedSubDiagram}()::Vector{ConnectedInducedSubDiagram}
         push!(only_joined, joined)
         return InducedSubDiagram(only_joined)
     end
     
     freedom = 4
 
-    neighboring_components::Set{ConnectedInducedSubDiagram} = BitSet()
+    neighboring_components::Vector{ConnectedInducedSubDiagram} = Vector{ConnectedInducedSubDiagram}()
     neighboring_components_size::BitSet = BitSet()
-    non_neighboring_components::Set{ConnectedInducedSubDiagram} = BitSet()
+    non_neighboring_components::Vector{ConnectedInducedSubDiagram} = Vector{ConnectedInducedSubDiagram}()
 
     total_size::Int = 1
     only_sporadic::Bool = false
@@ -567,8 +589,13 @@ function try_extend(VS::BitSet,S::InducedSubDiagram,D::Array{Int,2},v::Int)
                 if freedom ≤ 0  # can't have too many connections, neither too high degrees
                     return nothing
                 end
+                if D[u,v] == 0
+                    freedom = 0
+                end
                 freedom -= (min(D[u,v],5)-2)
-                push!(neighboring_components,c)
+                if length(neighboring_components) == 0 || c≠neighboring_components[end]
+                    push!(neighboring_components,c)
+                end
                 total_size += card(c)
                 if is_sporadic(c.type)
                     only_sporadic = true
@@ -578,7 +605,7 @@ function try_extend(VS::BitSet,S::InducedSubDiagram,D::Array{Int,2},v::Int)
                 end
             end
         end
-        if c ∉ neighboring_components
+        if length(neighboring_components) == 0 ||  c ≠ neighboring_components[end]
             push!(non_neighboring_components,c)
         end
 
@@ -594,7 +621,7 @@ function try_extend(VS::BitSet,S::InducedSubDiagram,D::Array{Int,2},v::Int)
     else
         new_components = non_neighboring_components 
         push!(new_components,joined)
-        return InducedSubDiagram(Set{ConnectedInducedSubDiagram}(new_components))
+        return InducedSubDiagram(new_components)
     end
 
 end
@@ -645,6 +672,7 @@ function build_diagram_and_subs(M::Array{Int,2};max_card::Union{Nothing,Int}=not
 
     das = DiagramAndSubs(reshape([],0,0),subs)
     for i in 1:n
+        println("extending with vertex $i")
         das = extend(das,M[i,1:i-1];max_card=max_card) 
     end
     return das
@@ -674,7 +702,7 @@ function is_compact_respectively_finvol(path::String)
         if D === nothing || rank === nothing
             println("Error reading file probably")
         else
-            das = build_diagram_and_subs(D;max_card=rank+1)
+            das = build_diagram_and_subs(D;max_card=rank)
             return (is_compact(das, rank), is_finite_volume(das, rank))
         end
     end
