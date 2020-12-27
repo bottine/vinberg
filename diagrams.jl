@@ -25,36 +25,68 @@ function gug_coxiter_to_matrix(descr)
     
     num_vertices = nothing
     rank = nothing
-    m = match(r"^(?<num_vertices>\d\d*)\s\s*(?<rank>\d\d*)$", lines[1])
+    m = match(r"^(?<num_vertices>\d\d*)\s\s*(?<rank>\d\d*)", lines[1])
     if m === nothing
-        println("can't match first line:")
+        println("can't match first line (we require the rank to be explicitely given):")
         println(lines[1])
         return nothing 
     end
 
     num_vertices = parse(Int,m[:num_vertices])
     rank = parse(Int,m[:rank])
-    
+     
     D = fill(2,num_vertices,num_vertices)
     for i in 1:num_vertices
         D[i,i] = 1
     end
+   
     
-    for line in lines[2:end]
-        m = match(r"^(?<from>\d\d*)\s\s*(?<to>\d\d*)\s\s*(?<label>\d\d*)$", line)
-        if m === nothing
-            continue
+    m = match(r"^vertices labels:(?<all_labels>(\s+\w+)*)\s*", lines[2])
+    if m ≠ nothing # labelled vertice
+        vertices = split(m[:all_labels])
+        if length(vertices) ≠ num_vertices
+            println("not enough vertex labels")
+            return nothing
         end
-        from = parse(Int,m[:from])
-        to = parse(Int,m[:to])
-        label = parse(Int,m[:label])
-      
-        if from ≠ to && from ∈ 1:num_vertices && to ∈ 1:num_vertices
-            D[from,to] = label
-            D[to,from] = label
+        
+        if length(lines) == 2
+            println("not enough lines")
+            return nothing
         end
+        for line in lines[3:end]
+            m = match(r"^(?<from>\w+)\s+(?<to>\w+)\s+(?<label>\d+)", line)
+            if m === nothing
+                continue
+            end
+            from = indexin([m[:from]],vertices)[1]
+            to = indexin([m[:to]],vertices)[1]
+            label = parse(Int,m[:label])
+            println("$from and $to and $label") 
+            if from ≠ nothing && to ≠ nothing && from ≠ to
+                D[from,to] = label
+                D[to,from] = label
+            end
+        end
+  
 
+    else # non labelled vertices
+        for line in lines[2:end]
+            m = match(r"^(?<from>\d\d*)\s\s*(?<to>\d\d*)\s\s*(?<label>\d\d*)", line)
+            if m === nothing
+                continue
+            end
+            from = parse(Int,m[:from])
+            to = parse(Int,m[:to])
+            label = parse(Int,m[:label])
+          
+            if from ≠ to && from ∈ 1:num_vertices && to ∈ 1:num_vertices
+                D[from,to] = label
+                D[to,from] = label
+            end
+        end
     end
+
+
     
     return D, rank
 
@@ -109,19 +141,55 @@ end
 
 
 
-#0 -> ()
-#1 -> (3)
-#2 -> (3,3)
-#3 -> (3,3,3)
-#4 -> (3,3,3,3)
-#5 -> (4)
-#6 -> (4,3)
-#7 -> (4,3,3)
-#8 -> (4,4)
-#
-
+#0  -> ()
+#1  -> (3)
+#2  -> (3,3)
+#3  -> (3,3,3)
+#4  -> (3,3,3,3)
+#5  -> (4)
+#6  -> (4,3)
+#7  -> (4,3,3)
+#8  -> (4,4)
+#9  -> (5)
+#10 -> (5,3)
+#11 -> (6)
+#12 -> (6,3)
+#13 -> (∞)
+#13+n -> (n)
 Deg = Int
 
+push_three(n::Deg) = begin
+    if n ≤ 3 || 5 ≤ n ≤ 6 || n == 9 || n == 11
+        return n+1
+    else
+        return nothing
+    end
+end
+push_four(n::Deg) = begin
+    if n ≤ 2 
+        return n+5
+    elseif n == 5
+        return 8
+    else
+        return nothing
+    end
+end
+push_five(n::Deg) = begin
+    if n ≤ 2
+        return n+9
+    else
+        return nothing
+    end
+end
+push_six(n::Deg) = begin
+    if n ≤ 2
+        return n+11
+    else
+        return nothing
+    end
+end
+push_infty(n::Deg) = (n==0 ? 13 : nothing)
+push_big(n::Deg,l::Int) = (n==0 ? 13+l : nothing)
 
 
 # Degree Sequence: Each vertex has an associated "multi-degree" which is a multiset containing the labels of edges incident to the vertex
@@ -591,8 +659,9 @@ function try_extend(VS::BitSet,S::InducedSubDiagram,D::Array{Int,2},v::Int)
                 end
                 if D[u,v] == 0
                     freedom = 0
+                else
+                    freedom -= (min(D[u,v],5)-2)
                 end
-                freedom -= (min(D[u,v],5)-2)
                 if length(neighboring_components) == 0 || c≠neighboring_components[end]
                     push!(neighboring_components,c)
                 end
