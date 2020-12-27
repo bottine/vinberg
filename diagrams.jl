@@ -95,15 +95,15 @@ end
 end
 
 
-function is_spherical(dt::DiagramType)::Bool
+@memoize function is_spherical(dt::DiagramType)::Bool
     dt ∈ [DT_a,DT_b,DT_d,DT_e6,DT_e7,DT_e8,DT_f4,DT_g2,DT_h2,DT_h3,DT_h4,DT_in]
 end
 
-function is_affine(dt::DiagramType)::Bool
+@memoize function is_affine(dt::DiagramType)::Bool
     dt ∈ [DT_A,DT_B,DT_C,DT_D,DT_E6,DT_E7,DT_E8,DT_F4,DT_G2,DT_Iinfty]
 end
 
-function is_sporadic(dt::DiagramType)::Bool
+@memoize function is_sporadic(dt::DiagramType)::Bool
     dt ∈ [DT_e6,DT_e7,DT_e8,DT_f4,DT_g2,DT_h2,DT_h3,DT_h4,DT_in,DT_E6,DT_E7,DT_E8,DT_F4,DT_G2,DT_Iinfty]
 end
 
@@ -572,7 +572,7 @@ function try_extend(VS::BitSet,S::InducedSubDiagram,D::Array{Int,2},v::Int)
     freedom = 4
 
     neighboring_components::Vector{ConnectedInducedSubDiagram} = Vector{ConnectedInducedSubDiagram}()
-    neighboring_components_size::BitSet = BitSet()
+    #neighboring_components_size::BitSet = BitSet()
     non_neighboring_components::Vector{ConnectedInducedSubDiagram} = Vector{ConnectedInducedSubDiagram}()
 
     total_size::Int = 1
