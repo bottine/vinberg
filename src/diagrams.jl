@@ -5,6 +5,8 @@ using Colors
 using Multisets
 using Memoize
 using StaticArrays
+using Debugger
+
 
 # TODO
 #
@@ -15,7 +17,7 @@ using StaticArrays
 #
 # * be efficient enough to run on the ./graphs/18-vinbxx examples
 
-import Base.push!, Base.length
+import Base.push!, Base.length, Base.copy
 
 function gug_coxiter_path_to_matrix(path)
     s = open(path) do file
@@ -68,7 +70,6 @@ function gug_coxiter_to_matrix(descr)
             from = indexin([m[:from]],vertices)[1]
             to = indexin([m[:to]],vertices)[1]
             label = parse(Int,m[:label])
-            println("$from and $to and $label") 
             if from ≠ nothing && to ≠ nothing && from ≠ to
                 D[from,to] = label
                 D[to,from] = label
@@ -147,171 +148,7 @@ end
 end
 
 
-
-#0  -> ()
-#1  -> (3)
-#2  -> (3,3)
-#3  -> (3,3,3)
-#4  -> (3,3,3,3)
-#5  -> (4)
-#6  -> (4,3)
-#7  -> (4,3,3)
-#8  -> (4,4)
-#9  -> (5)
-#10 -> (5,3)
-#11 -> (6)
-#12 -> (6,3)
-#13 -> (∞)
-#13+n -> (n)
-Deg = Int
-
-push_three(n::Deg) = begin
-    if n ≤ 3 || 5 ≤ n ≤ 6 || n == 9 || n == 11
-        return n+1
-    else
-        return nothing
-    end
-end
-push_four(n::Deg) = begin
-    if n ≤ 2 
-        return n+5
-    elseif n == 5
-        return 8
-    else
-        return nothing
-    end
-end
-push_five(n::Deg) = begin
-    if n ≤ 2
-        return n+9
-    else
-        return nothing
-    end
-end
-push_six(n::Deg) = begin
-    if n ≤ 2
-        return n+11
-    else
-        return nothing
-    end
-end
-push_infty(n::Deg) = (n==0 ? 13 : nothing)
-push_big(n::Deg,l::Int) = (n==0 ? 13+l : nothing)
-
-
-# Degree Sequence: Each vertex has an associated "multi-degree" which is a multiset containing the labels of edges incident to the vertex
-# A DegSeq is the multiset of the mult-degrees associated to the vertices of a diagram
-mutable struct DegSeq 
-    content::Vector{SVector{4,Int}}
-end
-
-function short_vec_to_svec(v::Vector{Int})::SVector{4,Int}
-    @assert length(v) ≤ 4
-    filled = vcat(v, fill(2,(4-length(v),1)))
-    return SVector{4,Int}(filled)
-
-end
-
-function Base.push!(ds::DegSeq,v::Vector{Int})
-    @assert length(v) ≤ 4
-    push!(ds.content,sort(short_vec_to_svec(v)))
-    sort!(ds.content)
-    return ds
-end
-
-function Base.:+(ds1::DegSeq,ds2::DegSeq)
-    DegSeq(sort(vcat(ds1.content,ds2.content)))
-end
-
-function Base.:*(k::Int,ds::DegSeq)
-    @assert k≥0
-    DegSeq(reduce(vcat,[[v for i in 1:k] for v in ds.content]))
-end
-
-function Base.length(ds::DegSeq)
-    length(ds.content)
-end
-
-function Base.:(==)(ds1::DegSeq,ds2::DegSeq)
-    (ds1.content == ds2.content)
-end
-
-# Given an array of arrays of ints, returns the associated degree sequence
-function deg_seq(vv::Vector{Vector{Int}})
-    @assert all(length(v) ≤ 4 for v in vv)
-    sorted_vv = [sort(short_vec_to_svec(v)) for v in vv]
-    return DegSeq(sort(sorted_vv))
-end
-
-# The degree sequences corresponding to each irreducible diagram types follow:
-
-const deg_seq_a1 = deg_seq(Vector{Vector{Int}}([[]]))
-deg_seq_a(n::Int) = begin
-    @assert n≥2
-    2*deg_seq([[3]]) + (n-2)*deg_seq([[3,3]])::DegSeq
-end
-
-const deg_seq_b2 = deg_seq([[4],[4]])
-const deg_seq_b3 = deg_seq([[4],[4,3],[3]])
-deg_seq_b(n)::DegSeq = begin
-    @assert n≥3
-    deg_seq([[4]]) + deg_seq([[4,3]]) + (n-3)*deg_seq([[3,3]]) + deg_seq([[3]])
-end
-
-deg_seq_d(n::Int)::DegSeq = begin
-    @assert n≥4
-    deg_seq([[3,3,3]]) + (n-4)*deg_seq([[3,3]]) + 3*deg_seq([[3]])
-end
-
-deg_seq_A(n::Int)::DegSeq = begin
-    @assert n≥3
-    n*deg_seq([[3,3]])
-end
-
-deg_seq_B4 = begin
-    deg_seq([[3,3,4],]) + 2*deg_seq([[3],]) + deg_seq([[4],])
-end
-
-deg_seq_B(n::Int)::DegSeq = begin
-    @assert n≥5
-    deg_seq([[3,3,3]]) + 2*deg_seq([[3]]) + (n-5)*deg_seq([[3,3]]) + deg_seq([[3,4]])  + deg_seq([[4]])
-end
-deg_seq_C3 = begin
-    deg_seq([[4,4]]) +  2*deg_seq([[4]])   
-end
-deg_seq_C(n::Int)::DegSeq = begin
-    @assert n≥4
-    2*deg_seq([[4,3]]) +  2*deg_seq([[4]])  + (n-4)*deg_seq([[3,3]])
-end
-
-const deg_seq_D5 = begin
-    deg_seq([[3,3,3,3]]) + 4*deg_seq([[3]])
-end
-deg_seq_D(n::Int)::DegSeq = begin
-    @assert n≥6
-    2*deg_seq([[3,3,3]]) + 4*deg_seq([[3]]) + (n-6)*deg_seq([[3,3]])
-end
-
-
-const deg_seq_f4 = deg_seq([[3],[3],[3,4],[3,4]])
-const deg_seq_F4 = deg_seq([[3],[3],[3,3],[3,4],[3,4]])
-const deg_seq_h2 = deg_seq([[5],[5]])
-const deg_seq_h3 = deg_seq([[5],[5,3],[3]])
-const deg_seq_h4 = deg_seq([[5],[5,3],[3,3],[3]])
-const deg_seq_g2 = deg_seq([[6],[6]])
-const deg_seq_G2 = deg_seq([[6],[6,3],[3]])
-const deg_seq_Iinfty = deg_seq([[0],[0]])
-function deg_seq_i(n::Int)::DegSeq
-    deg_seq([[n],[n]])
-end
-
-const deg_seq_e6 = deg_seq([[3,3,3],[3,3],[3,3],[3],[3],[3]])
-const deg_seq_e7 = deg_seq([[3,3,3],[3,3],[3,3],[3,3],[3],[3],[3]])
-const deg_seq_e8 = deg_seq([[3,3,3],[3,3],[3,3],[3,3],[3,3],[3],[3],[3]])
-const deg_seq_E6 = deg_seq([[3,3,3],[3,3],[3,3],[3,3],[3],[3],[3]])
-const deg_seq_E7 = deg_seq([[3,3,3],[3,3],[3,3],[3,3],[3,3],[3],[3],[3]])
-const deg_seq_E8 = deg_seq([[3,3,3],[3,3],[3,3],[3,3],[3,3],[3,3],[3],[3],[3]])
-
+include("degree_sequence.jl")
 
 
 
@@ -323,6 +160,9 @@ struct ConnectedInducedSubDiagram
     vertices::BitSet
     type::DiagramType
 end
+function Base.:(==)(c1::ConnectedInducedSubDiagram,c2::ConnectedInducedSubDiagram)
+    (c1.vertices == c2.vertices)
+end
 
 function CISD(vertices::BitSet,type)
     ConnectedInducedSubDiagram(vertices,type)
@@ -331,6 +171,13 @@ function CISD(vertices::Array{Int,1},type)
     ConnectedInducedSubDiagram(BitSet(vertices),type)
 end
 
+function Base.copy(c::ConnectedInducedSubDiagram)
+    return CISD(copy(c.vertices),c.type) 
+end
+
+function Base.copy(c::InducedSubDiagram)
+    return InducedSubDiagram(copy(c.connected_components),c.is_affine,c.is_spherical)
+end
 
 card(c::ConnectedInducedSubDiagram) = length(c.vertices)
 
@@ -455,6 +302,7 @@ end
 
 
 
+# dirty hack to memoize `connected_diagram_type` only on its first argument
 Arg = Tuple{BitSet,Array{Int,2},Bool}
 Base.hash(a::Arg, h::UInt) = hash(a[1], hash(:Arg, h))
 Base.isequal(a::Arg, b::Arg) = Base.isequal(hash(a), hash(b))
@@ -466,9 +314,13 @@ Base.isequal(a::Arg, b::Arg) = Base.isequal(hash(a), hash(b))
     
 
     deg_seq_and_assoc = build_deg_seq_and_associated_data(VS,D)
-    
+   
+    if deg_seq_and_assoc === nothing
+        return nothing
+    end
+
     joined = nothing
-    if  length(VS) ≤ 9 
+    if  length(VS) ≤ 9
         joined = connected_sporadic_diagram_type(VS,D,deg_seq_and_assoc) 
     end
     if joined === nothing && !only_sporadic
@@ -490,27 +342,30 @@ function build_deg_seq_and_associated_data(VS::BitSet,D::Array{Int,2})
     deg1_vertices = Dict{Int,BitSet}()
     deg3_vertices = Dict{Int,BitSet}()
     
-    deg_seqs::DegSeq = deg_seq(Vector{Vector{Int}}()) 
+    deg_seqs::DegSeq = DegSeq(Vector{Deg}()) 
     for v in VS
 
         @debug "looking at $v"
 
-        deg_seq_v = Vector{Int}() 
+        deg_v = empty_deg 
         simple_neighbors_v = BitSet()
         for u in VS if u ≠ v
             if D[u,v] == 3
                 push!(simple_neighbors_v,u)
             end
-            if D[u,v] ≠ 2 
-                push!(deg_seq_v,D[u,v])
+            if D[u,v] ≠ 2
+                deg_v = push_label(deg_v,D[u,v])
+                if deg_v === nothing
+                    return nothing
+                end
             end
         end end
-        if deg_seq_v == [3,3,3]
+        if deg_v == short_vec_to_deg([3,3,3])
             push!(deg3_vertices,v => simple_neighbors_v)
-        elseif deg_seq_v == [3]
+        elseif deg_v == short_vec_to_deg([3])
             push!(deg1_vertices,v => simple_neighbors_v)
         end
-        push!(deg_seqs, deg_seq_v)
+        push!(deg_seqs, deg_v)
         
         @debug "$v has deg_seq = $deg_seq_v"
     end    
@@ -585,6 +440,7 @@ function connected_sporadic_diagram_type(VS::BitSet,D::Array{Int,2},deg_seq_and_
 
 
     (ds, deg1_vertices, deg3_vertices, center, center_neighbors, extremities, extremities_neighbors) = deg_seq_and_assoc # build_deg_seq_and_associated_data(VS,D) 
+    
 
 
     if false
@@ -607,7 +463,10 @@ function connected_sporadic_diagram_type(VS::BitSet,D::Array{Int,2},deg_seq_and_
         return CISD(VS,DT_G2)
     elseif ds == deg_seq_Iinfty
         return CISD(VS,DT_Iinfty)
-    elseif length(ds) ≥ 1 && length(ds.content[1]) ≥ 1 && ds.content[1][1] ≥ 6 && ds == deg_seq_i(ds.content[1][1])
+    elseif length(ds) == 2  &&
+        big_label(ds.content[1]) ≠ nothing &&
+        big_label(ds.content[1]) ≥ 7 &&
+        ds == deg_seq_i(big_label(ds.content[1]))
         return CISD(VS,DT_in)
 
 
@@ -630,8 +489,9 @@ function connected_sporadic_diagram_type(VS::BitSet,D::Array{Int,2},deg_seq_and_
 end
 
 function try_extend(VS::BitSet,S::InducedSubDiagram,D::Array{Int,2},v::Int)
-    components = S.connected_components
-    
+    components = copy(S.connected_components)
+  
+
     # joined should/will be of type ConnectedInducedSubDiagram
     joined = nothing # Here is the result
     joined_vertices::BitSet = BitSet(v)
@@ -646,34 +506,38 @@ function try_extend(VS::BitSet,S::InducedSubDiagram,D::Array{Int,2},v::Int)
     
     freedom = 4
 
-    neighboring_components::Vector{ConnectedInducedSubDiagram} = Vector{ConnectedInducedSubDiagram}() # heavy on allocations
-    #neighboring_components_size::BitSet = BitSet()
-    non_neighboring_components::Vector{ConnectedInducedSubDiagram} = Vector{ConnectedInducedSubDiagram}() # heavy on allocations
 
     total_size::Int = 1
     only_sporadic::Bool = false
-    
-    for c in components
+    popped = false 
+    idx = 1
+    while idx ≤ length(components)
+        c = components[idx]
+            
+        popped = false
         for u in c.vertices
             if D[u,v] == 1 # dotted edge => early out
                 return nothing
-            elseif D[u,v] ≠ 2 
+            elseif D[u,v] ≠ 2
                 if is_affine(c.type) # can't extend affine types => early out
                     return nothing
                 end
                 if freedom ≤ 0  # can't have too many connections, neither too high degrees
                     return nothing
                 end
-                joined_vertices = joined_vertices∪c.vertices
                 if D[u,v] == 0
                     freedom = 0
                 else
                     freedom -= (min(D[u,v],5)-2)
                 end
-                if length(neighboring_components) == 0 || c≠neighboring_components[end]
-                    push!(neighboring_components,c)                                 # heavy on allocations
+                
+                joined_vertices = joined_vertices∪c.vertices
+                if popped == false 
+                    popat!(components,idx)
+                    popped = true
                 end
                 total_size += card(c)
+                
                 if is_sporadic(c.type)
                     only_sporadic = true
                 end
@@ -682,21 +546,21 @@ function try_extend(VS::BitSet,S::InducedSubDiagram,D::Array{Int,2},v::Int)
                 end
             end
         end
-        if length(neighboring_components) == 0 ||  c ≠ neighboring_components[end]
-            push!(non_neighboring_components,c)                                     # heavy on allocations
+        if popped == false
+            idx+=1
         end
 
     end
 
-    
+
     joined = connected_diagram_type(joined_vertices,D;only_sporadic=only_sporadic)
 
+    
     if joined === nothing
         return nothing
     else
-        new_components = non_neighboring_components 
-        push!(new_components,joined)
-        return InducedSubDiagram(new_components)
+        push!(components,joined)
+        return InducedSubDiagram(components)
     end
 
 end
@@ -720,20 +584,27 @@ function extend(das::DiagramAndSubs, v::Array{Int,1}; max_card::Union{Nothing,In
    
     new_vertex = n+1
     
+
+    
     new_subs::Vector{Vector{Tuple{BitSet,InducedSubDiagram}}} = [[] for i in eachindex(old_subs)]
     for i in eachindex(old_subs)
         if i ≤ max_card 
             for (support,subdiagram) in old_subs[i]
-                extended_with_v = try_extend(support,subdiagram,D,new_vertex)
-                if extended_with_v ≠ nothing 
-                    push!(new_subs[i],(support∪BitSet(new_vertex),extended_with_v))         # heavy on allocations
+                extended_with_v = try_extend(support,copy(subdiagram),D,new_vertex)
+                if extended_with_v ≠ nothing
+                    support_extended = support∪BitSet(new_vertex)
+
+                    push!(new_subs[i],(support_extended,extended_with_v))         # heavy on allocations
                 end
             end
         end 
     end 
-   
+    
+
+
     new_aligned::Vector{Vector{Tuple{BitSet,InducedSubDiagram}}} = vcat([[]], new_subs) 
     old_aligned::Vector{Vector{Tuple{BitSet,InducedSubDiagram}}} = vcat(old_subs, [[]])
+    
     return DiagramAndSubs(D,[vcat(old_aligned[i],new_aligned[i]) for i in eachindex(old_aligned)])
     
 end
@@ -753,9 +624,9 @@ function build_diagram_and_subs(M::Array{Int,2};max_card::Union{Nothing,Int}=not
 
     das = DiagramAndSubs(reshape([],0,0),subs)
     for i in 1:n
-        println("extending with vertex $i")
+        println(i)
         das = extend(das,M[i,1:i-1];max_card=max_card)
-        #print_das(das)
+
     end
     return das
 end
@@ -797,7 +668,7 @@ end
 function check_all_graphs(sub_directory="")
     
 
-    for (root, dirs, files) in walkdir("./graphs/"*sub_directory)
+    for (root, dirs, files) in walkdir("../graphs/"*sub_directory)
         for path in joinpath.(root, files)
             if endswith(path,".coxiter")
                 println("path: $path")
@@ -812,11 +683,11 @@ end
 function check_some_graphs()
 
     @time begin
-        for path in ["graphs/13-mcl11.coxiter"] 
+        for path in ["../graphs/13-mcl11.coxiter"] 
                 println("path: $path")
                 println(is_compact_respectively_finvol(path))
         end
-        for (root, dirs, files) in walkdir("./graphs/simplices")
+        for (root, dirs, files) in walkdir("../graphs/simplices")
             for path in joinpath.(root, files)
                 if endswith(path,".coxiter")
                     println("path: $path")
