@@ -450,7 +450,7 @@ end
 
 
 Arg = Tuple{BitSet,Array{Int,2},Bool}
-Base.hash(a::Arg, h::UInt) = hash(a[2], hash(a[1], hash(:Arg, h)))
+Base.hash(a::Arg, h::UInt) = hash(a[1], hash(:Arg, h))
 Base.isequal(a::Arg, b::Arg) = Base.isequal(hash(a), hash(b))
 
 
@@ -730,7 +730,9 @@ end
 
 
 function build_diagram_and_subs(M::Array{Int,2};max_card::Union{Nothing,Int}=nothing)
-    
+   
+    empty!(memoize_cache(connected_diagram_type))
+
     n = size(M,1)
     @assert size(M) == (n,n) "M must be square"
     @assert M == M' "M must be symmetric"
