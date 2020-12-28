@@ -6,7 +6,15 @@ using Multisets
 using Memoize
 using StaticArrays
 
-# TODO make efficient enough to run on ./graphs/18-vinb14_gamma2.coxiter in a short time
+# TODO
+#
+# * maybe implement DegSeq more efficiently
+# * memoize connected_diagram_type by hand
+# * make computation of build_deg_seq_and_associated_data more efficient by using previously constructed deg_seqs of the previous components?
+# * clean up structure
+# * store subdiagrams in arrays rather than a dict since all we do is iterate
+#
+# * be efficient enough to run on the ./graphs/18-vinbxx examples
 
 import Base.push!, Base.length
 
@@ -356,7 +364,7 @@ end
 
 struct DiagramAndSubs 
     D::Array{Int,(2)}
-    subs::Dict{BitSet,InducedSubDiagram}
+    subs::Vector{Vector{Tuple{BitSet,InducedSubDiagram}}}
 end
 
 
@@ -365,35 +373,43 @@ function print_das(das::DiagramAndSubs)
     println("The matrix is given by:")
     display(das.D)
     println()
-    println("and the subdiagrams are:")
-    for (sub_support, sub_diagram) in das.subs
-        println("$(collect(sub_support)) [affine=$(sub_diagram.is_affine),spherical=$(sub_diagram.is_spherical)]:")
-        for component in sub_diagram.connected_components
-            println("    $(component.type) : $(component.vertices)")
+    println("and the subdiagrams:")
+    for i in eachindex(das.subs)
+        println("cardinality $(i-1):")
+        for (sub_support, sub_diagram) in das.subs[i]
+            println("$(collect(sub_support)) [affine=$(sub_diagram.is_affine),spherical=$(sub_diagram.is_spherical)]:")
+            for component in sub_diagram.connected_components
+                println("    $(component.type) : $(component.vertices)")
+            end
         end
+        println("")
     end
     println("***********************")
 
 end
 
- function is_compact(dag::DiagramAndSubs,n::Int)
-    # Has spherical/parabolic diagram of rank n-1
-    has_spherical_sub_of_rank_n = false
+function is_compact(dag::DiagramAndSubs,n::Int)
 
     subs = dag.subs
+   
+    # just to ensure that `subs` is long enough
+    # TODO clean this
+    subs = vcat(subs, [[] for i in 1:n])
 
-    for (support, subdiagram) in subs
-        
-        if length(support) == n && is_spherical(subdiagram)
-            has_spherical_sub_of_rank_n = true
-        end
+    if ! any(is_spherical(subdiagram) for (support,subdiagram) in subs[n+1])
+        return false
+    end
 
-        if length(support) == n-1 && is_spherical(subdiagram)
-            extensions = [
-                ext_support for (ext_support, ext_subdiagram) in subs if 
-                support < ext_support && length(ext_support) == n && is_spherical(ext_subdiagram)
-            ]
-            if length(extensions) ≠ 2
+    for (support, subdiagram) in subs[n]
+
+        if  is_spherical(subdiagram)
+            num_extensions = 0
+            for (sup,sub) in subs[n+1]
+                if support < sup && is_spherical(sub)
+                    num_extensions += 1
+                end
+            end
+            if num_extensions ≠ 2
                 @debug "the subdiagram of support $support has $(length(extensions)) affine/spherical extensions"
                 return false
             end
@@ -401,39 +417,31 @@ end
     
     end
     
-    @debug "has_spherical_sub_of_rank_n = $has_spherical_sub_of_rank_n"
 
-    return has_spherical_sub_of_rank_n
+    return true
 
 end
 
 function is_finite_volume(dag::DiagramAndSubs,n::Int)
-    # Has spherical/parabolic diagram of rank n-1
-    has_spherical_sub_of_rank_n = false
-    has_affine_sub_of_rank_n_minus_1 = false
 
     subs = dag.subs
 
-    for (support, subdiagram) in subs
-        
-        if length(support) == n && is_spherical(subdiagram)
-            has_spherical_sub_of_rank_n = true
-        end
-        if length(support) == n && is_affine(subdiagram)
-            has_affine_sub_of_rank_n_minus_1 = true
-        end
+    subs = vcat(subs, [[] for i in 1:n])
+    
+    if ! any(is_spherical(subdiagram) || is_affine(subdiagram) for (support,subdiagram) in subs[n+1])
+        return false
+    end
 
-        if length(support) == n-1 && is_spherical(subdiagram)
-            extensions = [
-                ext_support for (ext_support, ext_subdiagram) in subs if 
-                support < ext_support && 
-                (
-                    ( length(ext_support) == n && is_spherical(ext_subdiagram) ) || 
-                    ( length(ext_support) == n && is_affine(ext_subdiagram) ) 
+    for (support, subdiagram) in subs[n]
 
-                ) 
-            ]
-            if length(extensions) ≠ 2
+        if  is_spherical(subdiagram)
+            num_extensions = 0
+            for (sup,sub) in subs[n+1]
+                if support < sup && (is_spherical(sub) || is_affine(sub))
+                    num_extensions += 1
+                end
+            end
+            if num_extensions ≠ 2
                 @debug "the subdiagram of support $support has $(length(extensions)) affine/spherical extensions"
                 return false
             end
@@ -441,12 +449,11 @@ function is_finite_volume(dag::DiagramAndSubs,n::Int)
     
     end
     
-    @debug "has_affine_sub_of_rank_n_minus_1 = $has_affine_sub_of_rank_n_minus_1"
-    @debug "has_spherical_sub_of_rank_n = $has_spherical_sub_of_rank_n"
 
-    return has_affine_sub_of_rank_n_minus_1 || has_spherical_sub_of_rank_n
+    return true
 
 end
+
 
 
 Arg = Tuple{BitSet,Array{Int,2},Bool}
@@ -702,7 +709,8 @@ is_spherical(isd::InducedSubDiagram) = all(is_spherical(c.type) for c in isd.con
 function extend(das::DiagramAndSubs, v::Array{Int,1}; max_card::Union{Nothing,Int}=nothing)
   
     D = das.D
-    subs = das.subs
+    old_subs = das.subs
+    max_card = (max_card === nothing ?  length(v)+1 : max_card) # if set to nothing, give it high enough value that it won't restrict anything
 
     n = length(v) 
     @assert size(D) == (n,n)
@@ -712,19 +720,22 @@ function extend(das::DiagramAndSubs, v::Array{Int,1}; max_card::Union{Nothing,In
     D = [D; [v;1]']
    
     new_vertex = n+1
-
-    new_subs::Dict{BitSet,InducedSubDiagram} = Dict{BitSet,InducedSubDiagram}()
-    for (V,S) in subs
-        if !isnothing(max_card) && length(V) ≤ max_card - 1
-            S_and_v = try_extend(V,S,D,new_vertex)
-            if S_and_v ≠ nothing 
-                push!(new_subs,(V∪BitSet(new_vertex)) => S_and_v)
+    
+    new_subs::Vector{Vector{Tuple{BitSet,InducedSubDiagram}}} = [[] for i in eachindex(old_subs)]
+    for i in eachindex(old_subs)
+        if i ≤ max_card 
+            for (support,subdiagram) in old_subs[i]
+                extended_with_v = try_extend(support,subdiagram,D,new_vertex)
+                if extended_with_v ≠ nothing 
+                    push!(new_subs[i],(support∪BitSet(new_vertex),extended_with_v))
+                end
             end
-        else
-            # means the subdiagram is too big and we don't care (because it won't matter for finite volume/cocompactness verification) 
-        end
-    end
-    return DiagramAndSubs(D,merge(subs,new_subs))
+        end 
+    end 
+   
+    new_aligned::Vector{Vector{Tuple{BitSet,InducedSubDiagram}}} = vcat([[]], new_subs) 
+    old_aligned::Vector{Vector{Tuple{BitSet,InducedSubDiagram}}} = vcat(old_subs, [[]])
+    return DiagramAndSubs(D,[vcat(old_aligned[i],new_aligned[i]) for i in eachindex(old_aligned)])
     
 end
 
@@ -738,13 +749,14 @@ function build_diagram_and_subs(M::Array{Int,2};max_card::Union{Nothing,Int}=not
     @assert M == M' "M must be symmetric"
     @assert all(l ≥ 0 for l in M) "M must have non-negative entries"
 
-    subs = Dict{BitSet,InducedSubDiagram}()
-    push!(subs,BitSet() => the_empty_isd())
+    subs = Vector{Vector{Tuple{BitSet,InducedSubDiagram}}}([[]])
+    push!(subs[1],(BitSet(), the_empty_isd()))
 
     das = DiagramAndSubs(reshape([],0,0),subs)
     for i in 1:n
         println("extending with vertex $i")
-        das = extend(das,M[i,1:i-1];max_card=max_card) 
+        das = extend(das,M[i,1:i-1];max_card=max_card)
+        #print_das(das)
     end
     return das
 end
@@ -774,6 +786,7 @@ function is_compact_respectively_finvol(path::String)
             println("Error reading file probably")
         else
             das = build_diagram_and_subs(D;max_card=rank)
+            print_das(das)
             return (is_compact(das, rank), is_finite_volume(das, rank))
         end
     end
