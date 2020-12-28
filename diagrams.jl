@@ -12,7 +12,6 @@ using StaticArrays
 # * memoize connected_diagram_type by hand
 # * make computation of build_deg_seq_and_associated_data more efficient by using previously constructed deg_seqs of the previous components?
 # * clean up structure
-# * store subdiagrams in arrays rather than a dict since all we do is iterate
 #
 # * be efficient enough to run on the ./graphs/18-vinbxx examples
 
@@ -635,7 +634,8 @@ function try_extend(VS::BitSet,S::InducedSubDiagram,D::Array{Int,2},v::Int)
     
     # joined should/will be of type ConnectedInducedSubDiagram
     joined = nothing # Here is the result
-    
+    joined_vertices::BitSet = BitSet(v)
+
     # special case, no component in S, so we just return the singleton
     if length(components) == 0
         joined = the_singleton(v)::ConnectedInducedSubDiagram
@@ -646,9 +646,9 @@ function try_extend(VS::BitSet,S::InducedSubDiagram,D::Array{Int,2},v::Int)
     
     freedom = 4
 
-    neighboring_components::Vector{ConnectedInducedSubDiagram} = Vector{ConnectedInducedSubDiagram}()
+    neighboring_components::Vector{ConnectedInducedSubDiagram} = Vector{ConnectedInducedSubDiagram}() # heavy on allocations
     #neighboring_components_size::BitSet = BitSet()
-    non_neighboring_components::Vector{ConnectedInducedSubDiagram} = Vector{ConnectedInducedSubDiagram}()
+    non_neighboring_components::Vector{ConnectedInducedSubDiagram} = Vector{ConnectedInducedSubDiagram}() # heavy on allocations
 
     total_size::Int = 1
     only_sporadic::Bool = false
@@ -664,13 +664,14 @@ function try_extend(VS::BitSet,S::InducedSubDiagram,D::Array{Int,2},v::Int)
                 if freedom ≤ 0  # can't have too many connections, neither too high degrees
                     return nothing
                 end
+                joined_vertices = joined_vertices∪c.vertices
                 if D[u,v] == 0
                     freedom = 0
                 else
                     freedom -= (min(D[u,v],5)-2)
                 end
                 if length(neighboring_components) == 0 || c≠neighboring_components[end]
-                    push!(neighboring_components,c)
+                    push!(neighboring_components,c)                                 # heavy on allocations
                 end
                 total_size += card(c)
                 if is_sporadic(c.type)
@@ -682,15 +683,13 @@ function try_extend(VS::BitSet,S::InducedSubDiagram,D::Array{Int,2},v::Int)
             end
         end
         if length(neighboring_components) == 0 ||  c ≠ neighboring_components[end]
-            push!(non_neighboring_components,c)
+            push!(non_neighboring_components,c)                                     # heavy on allocations
         end
 
     end
 
     
-    vertices::BitSet = ∪(BitSet(v),[c.vertices for c in neighboring_components]...)
-
-    joined = connected_diagram_type(vertices,D;only_sporadic=only_sporadic)
+    joined = connected_diagram_type(joined_vertices,D;only_sporadic=only_sporadic)
 
     if joined === nothing
         return nothing
@@ -727,7 +726,7 @@ function extend(das::DiagramAndSubs, v::Array{Int,1}; max_card::Union{Nothing,In
             for (support,subdiagram) in old_subs[i]
                 extended_with_v = try_extend(support,subdiagram,D,new_vertex)
                 if extended_with_v ≠ nothing 
-                    push!(new_subs[i],(support∪BitSet(new_vertex),extended_with_v))
+                    push!(new_subs[i],(support∪BitSet(new_vertex),extended_with_v))         # heavy on allocations
                 end
             end
         end 
@@ -786,7 +785,6 @@ function is_compact_respectively_finvol(path::String)
             println("Error reading file probably")
         else
             das = build_diagram_and_subs(D;max_card=rank)
-            print_das(das)
             return (is_compact(das, rank), is_finite_volume(das, rank))
         end
     end
