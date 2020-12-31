@@ -3,14 +3,37 @@ Deg = Int
 
 empty_deg = 0
 
-push_three(n::Deg) = begin
+
+#=
+#   0  -> []
+#   1  -> [3]
+#   2  -> [3,3]
+#   3  -> [3,3,3]
+#   4  -> [3,3,3]
+#   5  -> [4]
+#   6  -> [4,3]
+#   7  -> [4,3,3]
+#   8  -> [4,4]
+#   9  -> [5]
+#   10 -> [5,3]
+#   11 -> [6]
+#   12 -> [6,3]
+#   13 -> [∞]
+#   n  -> [n-13]
+#
+#
+#
+=#
+
+
+@inline push_three(n::Deg) = begin
     if n ≤ 3 || 5 ≤ n ≤ 6 || n == 9 || n == 11
         return n+1
     else
         return nothing
     end
 end
-push_four(n::Deg) = begin
+@inline push_four(n::Deg) = begin
     if n ≤ 2 
         return n+5
     elseif n == 5
@@ -19,24 +42,24 @@ push_four(n::Deg) = begin
         return nothing
     end
 end
-push_five(n::Deg) = begin
+@inline push_five(n::Deg) = begin
     if n ≤ 2
         return n+9
     else
         return nothing
     end
 end
-push_six(n::Deg) = begin
+@inline push_six(n::Deg) = begin
     if n ≤ 2
         return n+11
     else
         return nothing
     end
 end
-push_infty(n::Deg) = (n==0 ? 13 : nothing)
-push_big(n::Deg,l::Int) = (n==0 ? 13+l : nothing)
+@inline push_infty(n::Deg) = (n==0 ? 13 : nothing)
+@inline push_big(n::Deg,l::Int) = (n==0 ? 13+l : nothing)
 
-function push_label(n::Deg,l::Int)::Union{Deg,Nothing} 
+@inline function push_label(n::Deg,l::Int)::Union{Deg,Nothing} 
     if l == 3
         return push_three(n)
     elseif l == 4
