@@ -100,9 +100,9 @@ end
 
 function isd_rank(isd::InducedSubDiagram)
     
-    #@assert is_spherical(isd) || is_affine(isd) "We only care about the rank for spherical/affine diagrams"
-
-    return sum(vcat([0], [cisd_rank(c) for c in isd.connected_components]))
+    @assert is_spherical(isd) || is_affine(isd) "We only care about the rank for spherical/affine diagrams"
+    
+    return sum(vcat([0], [cisd_rank(c) for c in isd.connected_components])) # should be equal cardinality - connected_compnents
 
 end
 
@@ -117,15 +117,6 @@ end
 
 
 
-
-function subdiagrams_of_rank(das::DiagramAndSubs,r::Int; cond_affine=false, cond_spherical=false)
-    @assert cond_affine == true || cond_spherical == true
-    ret = []
-    for card in r:size(das.D,1)
-        append!(ret,[(sup,sub) for (sup,sub) in subdiagrams_of_card(das,card) if isd_rank(sub) == r && (is_affine(sub) ≥ cond_affine && is_spherical(sub) ≥ cond_spherical)]) 
-    end
-    return ret
-end
 
 function dump_das(das::DiagramAndSubs;range=nothing)
    
@@ -532,11 +523,11 @@ function extend!(das::DiagramAndSubs, v::Array{Int,1})
     new_subs::Vector{Tuple{SBitSet{1},InducedSubDiagram}} = filter(x->!isnothing(x),map(extend_one,das.subs)) 
     
     for (support,subdiagram) in new_subs
-        if is_spherical(subdiagram) && isd_rank(subdiagram) == das.d-1
+        if is_spherical(subdiagram) && length(support) == das.d-1
             push!(das.spherical_subs_rank_d_minus_1,(support,subdiagram))
-        elseif is_spherical(subdiagram) && isd_rank(subdiagram) == das.d
+        elseif is_spherical(subdiagram) && length(support) == das.d
             push!(das.spherical_subs_rank_d,(support,subdiagram))
-        elseif is_affine(subdiagram) && isd_rank(subdiagram) == das.d-1
+        elseif is_affine(subdiagram) && length(support) - length(subdiagram.connected_components) == das.d-1
             push!(das.affine_subs_rank_d_minus_1,(support,subdiagram))
         end
     end
