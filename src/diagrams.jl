@@ -53,7 +53,7 @@ end
 
 card(c::ConnectedInducedSubDiagram) = length(c.vertices)
 
-is_empty(c::ConnectedInducedSubDiagram) = length(c.vertices) == 0
+is_empty(c::ConnectedInducedSubDiagram) = isempty(c.vertices)
 
 the_singleton(v::Int) = CISD(SBitSet{4}(v),DT_a)
 
@@ -154,7 +154,7 @@ function is_compact(das::DiagramAndSubs)
 
     dense_bitset_str(b::SBitSet{4}) = *("[",[string(i)*"," for i in b]...,"]")
    
-    if length(das.spherical_subs_rank_d) == 0
+    if isempty(das.spherical_subs_rank_d)
         return false
     end
 
@@ -189,7 +189,7 @@ function is_finite_volume(das::DiagramAndSubs)
     
     dense_bitset_str(b::SBitSet{4}) = *("[",[string(i)*"," for i in b]...,"]")
     
-    if length(das.spherical_subs_rank_d) == 0 && length(das.affine_subs_rank_d_minus_1) == 0
+    if isempty(das.spherical_subs_rank_d) && isempty(das.affine_subs_rank_d_minus_1)
         return false
     end
 
@@ -222,6 +222,51 @@ function is_finite_volume(das::DiagramAndSubs)
     
 
     return true
+
+end
+
+function is_compact_finite_volume(das::DiagramAndSubs)
+
+    
+    compact = true
+    fin_vol = true
+    dense_bitset_str(b::SBitSet{4}) = *("[",[string(i)*"," for i in b]...,"]")
+    
+    if isempty(das.spherical_subs_rank_d)
+        compact = false
+        if isempty(das.affine_subs_rank_d_minus_1)
+            fin_vol = false
+            return (compact, fin_vol)
+        end
+    end
+
+    for (support, subdiagram) in das.spherical_subs_rank_d_minus_1
+
+        num_sph_extensions = 0
+        num_aff_extensions = 0
+        for (sup,sub) in das.spherical_subs_rank_d
+            if support ⊆ sup
+                num_sph_extensions += 1
+            end
+        end
+        for (sup,sub) in das.affine_subs_rank_d_minus_1
+            if support ⊆ sup
+                num_aff_extensions += 1
+            end
+        end
+        if num_sph_extensions ≠ 2
+            compact = false
+        end
+        if num_sph_extensions + num_aff_extensions ≠ 2
+            fin_vol = false
+        end
+        if (compact,fin_vol) == (false,false)
+            return (compact,fin_vol)
+        end
+    
+    end
+
+    return (compact,fin_vol)
 
 end
 
@@ -411,9 +456,9 @@ end
         return CISD(VS,DT_e7)
     elseif ds == deg_seq_e8 && length(center_neighbors∩extremities) == 1 && length(extremities_neighbors ∩ center_neighbors) == 1 
         return CISD(VS,DT_e8)
-    elseif ds == deg_seq_E6 && length(center_neighbors∩extremities) == 0    
+    elseif ds == deg_seq_E6 && isempty(center_neighbors∩extremities)    
         return CISD(VS,DT_E6)
-    elseif ds == deg_seq_E7 && length(center_neighbors∩extremities) == 1 && length(extremities_neighbors ∩ center_neighbors) == 0 
+    elseif ds == deg_seq_E7 && length(center_neighbors∩extremities) == 1 && isempty(extremities_neighbors ∩ center_neighbors) 
         return CISD(VS,DT_E7)
     elseif ds == deg_seq_E8 && length(center_neighbors∩extremities) == 1 && length(extremities_neighbors ∩ center_neighbors) == 1 
         return CISD(VS,DT_E8)
@@ -423,12 +468,12 @@ end
 
 end
 
-function try_extend(VS::SBitSet{4},S::InducedSubDiagram,D::Array{Int,2},v::Int)
+function try_extend(VS::SBitSet{4},S::InducedSubDiagram,D::Array{Int,2},v::Int)::Union{Nothing,InducedSubDiagram}
    
    
 
     # special case, no component in S, so we just return the singleton
-    if length(S.connected_components) == 0
+    if isempty(S.connected_components)
         joined = the_singleton(v)::ConnectedInducedSubDiagram
         only_joined = Vector{ConnectedInducedSubDiagram}([joined])
         return InducedSubDiagram(only_joined)
@@ -497,7 +542,7 @@ function try_extend(VS::SBitSet{4},S::InducedSubDiagram,D::Array{Int,2},v::Int)
     else
         push!(components,joined)
 
-        return InducedSubDiagram(components)
+        return InducedSubDiagram(components)::InducedSubDiagram
     end
 
 end
@@ -516,14 +561,13 @@ function extend!(das::DiagramAndSubs, v::Array{Int,1})
     new_vertex = n+1
     singleton_v = SBitSet{4}(new_vertex)
 
-    new_subs::Vector{Tuple{SBitSet{4},InducedSubDiagram}} = sizehint!([],length(das.subs))
-    sizehint!(das.subs,length(das.subs)*2)
-    for (sup,sub) in das.subs
+    #= Can't be more efficient it seems
+    @inline function extend_one(supsub::Tuple{SBitSet{4},InducedSubDiagram})
+        sup,sub = supsub
         res = try_extend(sup,sub,das.D,new_vertex)
         if res ≠ nothing
             sup_v = sup|singleton_v
             sub_v = res
-            push!(new_subs,(sup_v,sub_v))
             if is_spherical(sub_v) && length(sup_v) == das.d-1
                 push!(das.spherical_subs_rank_d_minus_1,(sup_v,sub_v))
             elseif is_spherical(sub_v) && length(sup_v) == das.d
@@ -531,11 +575,42 @@ function extend!(das::DiagramAndSubs, v::Array{Int,1})
             elseif is_affine(sub_v) && length(sup_v) - length(sub_v.connected_components) == das.d-1
                 push!(das.affine_subs_rank_d_minus_1,(sup_v,sub_v))
             end
+            return (sup_v,sub_v)
+        else
+            return nothing
         end
     end
-    
-    
+    new_subs::Vector{Tuple{SBitSet{4},InducedSubDiagram}} =filter(x -> !isnothing(x),extend_one.(das.subs))
     append!(das.subs,new_subs)
+    sizehint!(das.subs,length(das.subs)*2)
+    =#
+    
+    #new_subs::Vector{Tuple{SBitSet{4},InducedSubDiagram}} = sizehint!([],length(das.subs)) 
+    #sizehint!(das.subs,length(das.subs)*2)
+    len = length(das.subs)
+    i = len+1
+    resize!(das.subs,2*len)
+    for j in 1:len
+        (sup,sub) = das.subs[j]
+        res = try_extend(sup,sub,das.D,new_vertex)
+        if res ≠ nothing
+            sup_v = sup|singleton_v
+            sub_v = res
+            #push!(new_subs,(sup_v,sub_v))
+            if is_spherical(sub_v) && length(sup_v) == das.d-1
+                push!(das.spherical_subs_rank_d_minus_1,(sup_v,sub_v))
+            elseif is_spherical(sub_v) && length(sup_v) == das.d
+                push!(das.spherical_subs_rank_d,(sup_v,sub_v))
+            elseif is_affine(sub_v) && length(sup_v) - length(sub_v.connected_components) == das.d-1
+                push!(das.affine_subs_rank_d_minus_1,(sup_v,sub_v))
+            end
+            das.subs[i] = (sup_v,sub_v)
+            i += 1
+        end
+    end
+
+    resize!(das.subs,i-1)
+    #append!(das.subs,new_subs)
    
 end
 
@@ -554,6 +629,7 @@ function build_diagram_and_subs(M::Array{Int,2},dimension::Int)
 
     das = DiagramAndSubs(reshape([],0,0),dimension,subs,[],[],[])
     for i in 1:n
+        #println(i)
         extend!(das,M[i,1:i-1])
     end
     return das
@@ -587,7 +663,7 @@ function is_compact_respectively_finvol(path::String)
             #dump_das(das;range=nothing)
             compact = is_compact(das)
             fin_vol = is_finite_volume(das)
-            return (compact, fin_vol)
+            return is_compact_finite_volume(das) 
         end
     end
 
