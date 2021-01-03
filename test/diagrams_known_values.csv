@@ -765,3 +765,23 @@ simplices/8-jkrt_351-04-P8.coxiter;false;true;;
 simplices/9-jkrt_351-01-T9.coxiter;false;true;;
 simplices/9-jkrt_351-02-S9.coxiter;false;true;;
 simplices/9-jkrt_351-03-Q9.coxiter;false;true;;
+
+
+# values taken from CoxIter's output
+3-testArithmeticity.coxiter;false;true;;
+4-felikson2007_5.2.1.coxiter;true;true;;
+4-felikson2007_5.2.2.coxiter;true;true;;
+4-felikson2007_5.2.3.coxiter;true;true;;
+4-felikson2007_5.2.7.coxiter;true;true;;
+4-PauperGamma1.coxiter;true;true;;
+4-PauperGamma2.coxiter;true;true;;
+4-PauperGamma3.coxiter;true;true;;
+4-PauperGamma4.coxiter;false;true;;
+4-zehrt09_2290.coxiter;false;true;;
+5-birectified-5-simplex.coxiter;false;true;;
+6-PauperGamma5.coxiter;false;true;;
+8-Bugaenko.coxiter;true;true;;
+10-thierryP_1-10.coxiter;false;true;;
+13-mcl11.coxiter;false;true;;
+14-vinb85.coxiter;false;true;;
+16-tum03_236.coxiter;false;true;;
