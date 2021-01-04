@@ -64,17 +64,17 @@ struct QuadLatticeElement
     #vec::Array{Int,1}
 end
 function Base.isequal(v1::QuadLatticeElement,v2::QuadLatticeElement)
-    v1.L == v2.L && v1.vec == v2.vec
+    v1.L == v2.L && v1.vec == v2.vec
 end
 
 function Base.:(==)(v1::QuadLatticeElement,v2::QuadLatticeElement)
-    v1.L == v2.L && v1.vec == v2.vec
+    v1.L == v2.L && v1.vec == v2.vec
 end
 struct VinbergLattice
     # By which we mean, a quadratic lattice along with
     # * An element of negative norm v₀
     # * A basis V1_basis of the sublattice v₀^\perp = V₁
-    # * A set of representatives W_reps for the quotient of L by V₁⊕ℤv₀
+    # * A set of representatives W_reps for the quotient of L by V₁⊕ℤv₀
 
     L::QuadLattice
     v0::QuadLatticeElement
@@ -89,15 +89,15 @@ end
 function VinbergLattice(G)
     assert_sig_n_1_matrix(G)
         
-    L = QuadLattice(G)
+    L = QuadLattice(G)
     v0 = negative_vector(L)
     V1_basis = basis_of_orhogonal_complement(L,v0)
         
     M = Matrix(reshape(v0.vec,(rank(L),1)))
     for v in V1_basis
-        M = hcat(M,Matrix(reshape(v.vec,(rank(L),1))))
+        M = hcat(M,Matrix(reshape(v.vec,(rank(L),1))))
     end
-    W = get_integer_points(M)
+    W = get_integer_points(M)
     W_reps = (x -> QuadLatticeElement(L,x)).(W)
    
     @assert length(W_reps) == det(M)
@@ -152,12 +152,12 @@ end
 
 function is_root(v::QuadLatticeElement)
 
-    # A root has (non strictly) positive norm
+    # A root has (non strictly) positive norm
     if norm(v) < 0
         return false
     end
 
-    # A root is a primitive vector, i.e. the gcd of its entries is 1
+    # A root is a primitive vector, i.e. the gcd of its entries is 1
     vv = v.vec
     if abs(gcd(vv)) ≠ 1
         return false
@@ -195,7 +195,7 @@ end
 # TODO: check that? what does it mean?
 function last_invariant_factor(L::QuadLattice)
     G = Rational{Integer}.(L.G)
-    cofactorsG = det(G) * inv(G) # https://stackoverflow.com/questions/58149645/julia-how-can-we-compute-the-adjoint-or-classical-adjoint-linear-algebra
+    cofactorsG = det(G) * inv(G) # https://stackoverflow.com/questions/58149645/julia-how-can-we-compute-the-adjoint-or-classical-adjoint-linear-algebra
 
     return abs(Integer(det(G)//gcd(cofactorsG)))
 end
@@ -312,8 +312,8 @@ function roots_of_fundamental_cone(VL::VinbergLattice)
     for r in possible_roots
         @assert ((-1)*r).vec == -r.vec
         @assert QuadLatticeElement(r.L,-r.vec) == (-1)*r
-        # @assert (r ∉ cone_roots) ⊻ all((-1)*r ≠ cr for cr in cone_roots) "yes?" TODO WTF
-        if all((-1)*r ≠ cr for cr in cone_roots) # TODO seems like we can't test equality for our own type QuadLatticeElement
+        # @assert (r ∉ cone_roots) ⊻ all((-1)*r ≠ cr for cr in cone_roots) "yes?" TODO WTF
+        if all((-1)*r ≠ cr for cr in cone_roots) # TODO seems like we can't test equality for our own type QuadLatticeElement
             if is_necessary_hyperplane([r.vec for r in cone_roots],Array{BigInt,2}(VL.L.G), r.vec)
                 push!(cone_roots,r)
             end
@@ -363,7 +363,7 @@ function next!(r::RootsByDistance)
     
     v0 = r.VL.v0
 
-    dist(a0,k,w) = abs(a0*(v0⊙v0) + (w⊙v0))/sqrt(-(k*(v0⊙v0))) # TODO: ensure that the minus sign is needed
+    dist(a0,k,w) = abs(a0*(v0⊙v0) + (w⊙v0))/sqrt(-(k*(v0⊙v0))) # TODO: ensure that the minus sign is needed
 
     while r.current_a0_and_k_and_w === nothing || isempty(r.roots_for_current_a0_and_k_and_w)
         
@@ -488,7 +488,7 @@ G2 = [-7 0   0 0;
       0 0 -1 2]
 
 
-# Example 6.2.5 in Guglielmetti's thesis
+# Example 6.2.5 in Guglielmetti's thesis
 Gug_625 = [-1 0 0 0;
             0 2 0 0;
             0 0 6 0;
