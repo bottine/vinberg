@@ -2,6 +2,7 @@
 
 # using Plots
 using LinearAlgebra
+using AbstractAlgebra
 using Base
 
 include("util.jl")
@@ -65,8 +66,8 @@ function bounding_box_diago(A,b,γ)
         sols = solve_quadratic_poly(A[i],2*A[i]*x[i] + b[i],minval) 
         #println("($i) solutions are $sols")
         @assert size(sols,1) == 2 "Should always have solutions because pos def I think"
-        push!(min,round(x[i] + sols[1],digits=0)-1) 
-        push!(max,round(x[i] + sols[2],digits=0)+1) 
+        push!(min,BigInt(round(x[i] + sols[1],digits=0))-1) 
+        push!(max,BigInt(round(x[i] + sols[2],digits=0))+1) 
     end
 
     bounding_box = [[]]
@@ -83,32 +84,40 @@ function qsolve(A,b,γ)
     return qsolve_naive(A,b,γ)
 end
 
-function qsolve_naive(A,b,γ)
+function qsolve_naive(A::Array{BigInt,2},b::Array{BigInt,1},γ::BigInt)
     
+#    println("QSOLVE x'Ax + b'x + γ = 0 with A as:")
+#    display(A)
+#    println("")
+#    println(" and b as")
+#    display(b)
+#    println("")
+#    println(" and γ as $γ")
 
     @assert issymmetric(A) "A must be symmetric"
     @assert isposdef(A) "A must be positive definite"
+    # TODO put this back!!!!! but make sure it actually works
 
     n = size(A,1)
     
-    D,P = if isdiag(A)
+    D::Array{BigInt,2},P::Array{BigInt,2} = if isdiag(A)
         A,Diagonal(ones(n))
     else
         diagonalize(A)
     end
     d = diag(D)
 
-    println("Diagonalization: P is")
-    display(P)
-    println("\n and D is")
-    display(D)
-    println("\n")
+#    println("Diagonalization: P is ($(typeof(P)))")
+#    display(P)
+#    println("\n and D is($(typeof(D)))")
+#    display(D)
+#    println("\n")
 
 
     @assert P'*A*P == D "We have a diagonalization"
 
     @assert inv(P')' == inv(P)
-    Q = inv(Rational{Int}.(P)) # forces the inverse computation to be rational if I'm not mistaken
+    Q = inv(Rational{BigInt}.(P)) # forces the inverse computation to be rational if I'm not mistaken
     @assert Q*P == I && P*Q == I
     @assert Q'*P' == I && P'*Q' == I 
     
@@ -120,10 +129,10 @@ function qsolve_naive(A,b,γ)
     
     bounding_box_diag = bounding_box_diago(d,P'*b,γ)
     representatives    = get_integer_points(P)
-
-    println("# representatives: ", length(representatives))
-    println("# bounding_box_diag: ", length(bounding_box_diag))
-
+#
+#    println("# representatives: ", length(representatives))
+#    println("# bounding_box_diag: ", length(bounding_box_diag))
+#
     solutions = Set()
     for v0 in bounding_box_diag, r in representatives
         v = P*v0 + r
@@ -132,8 +141,9 @@ function qsolve_naive(A,b,γ)
             push!(solutions,v)
         end
     end
+    
 
-    return solutions
+    return [BigInt.(s) for s in solutions] 
 end
 
 
