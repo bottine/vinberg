@@ -2,7 +2,12 @@
 #using Hecke
 using AbstractAlgebra
 using LinearAlgebra
-# using SymPy
+using Polyhedra
+using CDDLib
+
+
+import Base: vec, convert
+
 
 # Code adapted from N. V. Bogachev and A. Yu. Perepechko:
 #
@@ -18,6 +23,7 @@ using LinearAlgebra
 
 include("util.jl")
 include("qsolve.jl")
+include("diagrams.jl")
 
 struct QuadLattice
     n_pos::Integer
@@ -48,9 +54,6 @@ end
 function Base.:(==)(L1::QuadLattice,L2::QuadLattice)
     L1.G == L2.G
 end
-
-
-
 
 
 
@@ -92,7 +95,9 @@ function VinbergLattice(G)
     L = QuadLattice(G)
     v0 = negative_vector(L)
     V1_basis = basis_of_orhogonal_complement(L,v0)
-        
+
+    @info "V1_basis is $([v.vec for v in V1_basis])"
+
     M = Matrix(reshape(v0.vec,(rank(L),1)))
     for v in V1_basis
         M = hcat(M,Matrix(reshape(v.vec,(rank(L),1))))
@@ -100,14 +105,14 @@ function VinbergLattice(G)
     W = get_integer_points(M)
     W_reps = (x -> QuadLatticeElement(L,x)).(W)
    
-    @assert length(W_reps) == det(M)
+    @assert length(W_reps) == abs(det(M)) "only $(length(W_reps)) but need $(det(M))"
     @assert norm(v0) % length(W_reps) == 0
     
     return VinbergLattice(L,v0,V1_basis,W_reps)
 
 end
 
-function convert(v::QuadLatticeElement) 
+function Base.convert(v::QuadLatticeElement) 
     return v.vec::Array{BigInt,1} 
 end
 
@@ -137,7 +142,6 @@ function standard_basis(L::QuadLattice)
 end
 
 function Base.:-(v::QuadLatticeElement)         ## the `Base.:` syntax is necessary to make julia undenstand that we want to extend the function `-` to our type
-    @assert same_quad_lattice(v,w) "The elements must belong to the same lattice"
     return QuadLatticeElement(-v.vec,v.L)
 end 
 
@@ -304,26 +308,115 @@ function negative_vector(L::QuadLattice)
 
 end
 
+function roots_in_V1(VL::VinbergLattice)
+
+    sort([v for k in root_lengths(VL.L) for v in roots_decomposed_into(VL,zero_elem(VL.L),k) if is_root(v)],by=(v->v.vec))
+
+end
+
+function is_necessary_hyperplane(rr::Vector{QuadLatticeElement},r::QuadLatticeElement)
+    
+    L = r.L
+    @assert all(ro.L == r.L for ro in rr)
+    @assert is_root(r)
+    @assert all(is_root(ro) for ro in rr)
+
+    return is_necessary_hyperplane([ro.vec for ro in rr],Array{BigInt,2}(r.L.G),r.vec)
+
+end
+
 function roots_of_fundamental_cone(VL::VinbergLattice)
 
-    possible_roots = Set([v for k in root_lengths(VL.L) for v in roots_decomposed_into(VL,zero_elem(VL.L),k) if is_root(v)])
+    function drop_redundant_roots(roots::Vector{QuadLatticeElement})
 
-    cone_roots::Set{QuadLatticeElement} = Set()
+        for i in 1:length(roots)
+            r = roots[i]
+            rr = vcat(roots[1:i-1], roots[i+1:end])
+            
+            println("|$(r.vec)\n|and\n|$([r.vec for r in rr])")
+
+            if ! is_necessary_hyperplane(rr,r)
+                println("|dropping")
+                return drop_redundant_roots(rr) 
+            end
+        end
+        
+        println("| returning $([r.vec for r in roots])")
+        return roots
+        
+    end
+
+
+    possible_roots = roots_in_V1(VL) 
+    @info "possible_roots are: $([r.vec for r in possible_roots])"
+
+    cone_roots::Vector{QuadLatticeElement} = Vector()
+    for r in possible_roots
+        println("looking at $(r.vec)")
+        println("cone_roots is $([r.vec for r in cone_roots])")
+        @assert ((-1)*r).vec == -r.vec
+        @assert QuadLatticeElement(r.L,-r.vec) == (-1)*r
+        # @assert (r ∉ cone_roots) ⊻ all((-1)*r ≠ cr for cr in cone_roots) "yes?" TODO WTF
+        if  all((-1)*r ≠ cr for cr in cone_roots) # &&  all(r⊙cr ≤ 0 for cr in cone_roots) # TODO seems like we can't test equality for our own type QuadLatticeElement
+            println("compatible with other roots")
+            # TODO I added the condition r⊙cr≤0 but I'm not sure it's good to have it there
+            if is_necessary_hyperplane(cone_roots, r) && is_necessary_hyperplane(cone_roots, (-1)*r)
+                println("adding $(r.vec)")
+                push!(cone_roots,r)
+                cone_roots = drop_redundant_roots(cone_roots)
+            end
+        
+        else
+            if ! all((-1)*r ≠ cr for cr in cone_roots)
+                println("$(r.vec) has an inverse in cone_roots")  
+            end
+            if ! all(r⊙cr ≤ 0 for cr in cone_roots)
+                println("$(r.vec) has bad angle with an elem of cone_roots")
+            end
+        end
+        
+    end
+    
+    #return cone_roots
+    return drop_redundant_roots(cone_roots)
+
+end
+
+function fundamental_cone_polyh(VL::VinbergLattice)
+
+
+
+    possible_roots = [v for k in root_lengths(VL.L) for v in roots_decomposed_into(VL,zero_elem(VL.L),k) if is_root(v)]
+
+    cone_roots::Vector{QuadLatticeElement} = []
+    fundamental_cone = nothing 
     for r in possible_roots
         @assert ((-1)*r).vec == -r.vec
         @assert QuadLatticeElement(r.L,-r.vec) == (-1)*r
         # @assert (r ∉ cone_roots) ⊻ all((-1)*r ≠ cr for cr in cone_roots) "yes?" TODO WTF
-        if all((-1)*r ≠ cr for cr in cone_roots) # TODO seems like we can't test equality for our own type QuadLatticeElement
-            if is_necessary_hyperplane([r.vec for r in cone_roots],Array{BigInt,2}(VL.L.G), r.vec)
+        
+        if isempty(cone_roots)
+
+            eq_r = Array{Int,1}(VL.L.G*r.vec)
+            H_r = HalfSpace{Int,Array{Int,1}}(eq_r,0)
+            fundamental_cone = polyhedron(hrep([H_r]), CDDLib.Library(:exact))
+            push!(cone_roots,r)
+
+        elseif all((-1)*r ≠ cr for cr in cone_roots) && all(r⊙cr ≤ 0 for cr in cone_roots)
+            # TODO seems like we can't test equality for our own type QuadLatticeElement
+            # TODO I added the condition r⊙cr≤0 but I'm not sure it's good to have it there
+            eq_r = Array{Int,1}(VL.L.G*r.vec)
+            H_r = HalfSpace{Int,Array{Int,1}}(eq_r,0) # = {x : x' * G * r ≤ 0}
+            if ! issubset(fundamental_cone, H_r)
                 push!(cone_roots,r)
+                fundamental_cone = fundamental_cone ∩ H_r
             end
+
         end 
     end
     
     return cone_roots
-
 end
-
 
 
 mutable struct RootsByDistance
@@ -336,6 +429,7 @@ end
 
 function RootsByDistance(VL::VinbergLattice)
     
+    @info "> RootsByDistance(…)"
     v0 = VL.v0
 
     next_least_a0_for_k_and_w::Dict{Tuple{Integer,QuadLatticeElement},Tuple{Integer,Integer}} = Dict()
@@ -347,11 +441,13 @@ function RootsByDistance(VL::VinbergLattice)
         push!(next_least_a0_for_k_and_w, (k,w) => (least_plus,least_minus))
     end
 
-
+    @info "W_reps has cardinality $(length(VL.W_reps)) and the number of possible root lengths is $(length(root_lengths(VL.L)))"
 
     current_a0_and_k_and_w::Union{Nothing,Tuple{Integer,Integer,QuadLatticeElement}} = nothing;
     #current_a0_and_k_and_w = nothing;
     roots_for_current_a0_and_k_and_w::Set{QuadLatticeElement} = Set()
+    
+    @info "< RootsByDistance(…)"
     
     return RootsByDistance(VL,next_least_a0_for_k_and_w,current_a0_and_k_and_w,roots_for_current_a0_and_k_and_w)
 
@@ -361,6 +457,7 @@ end
 
 function next!(r::RootsByDistance)
     
+    @info "> next!(roots_by_distance)"
     v0 = r.VL.v0
 
     dist(a0,k,w) = abs(a0*(v0⊙v0) + (w⊙v0))/sqrt(-(k*(v0⊙v0))) # TODO: ensure that the minus sign is needed
@@ -395,10 +492,10 @@ function next!(r::RootsByDistance)
             a0minus -= 1
         end
         r.next_least_a0_for_k_and_w[(k,w)] = (a0plus,a0minus)
-       
         r.roots_for_current_a0_and_k_and_w = filter(is_root,Set(roots_decomposed_into(r.VL,a0*v0 + w,k)))
     end
     
+    @info "< next!(roots_by_distance)"
     return pop!(r.roots_for_current_a0_and_k_and_w)
 
 end
@@ -418,29 +515,52 @@ function roots_decomposed_into(VL::VinbergLattice, a::QuadLatticeElement, k::Int
     # (v₁+a)⊙(v₁+a) = k iff  v₁⊙v₁ + 2 v₁⊙a = k-a⊙a,
     # and
    
-
+    @info "> roots_decomposed_into(VL, $(a.vec), $k)"
+    #println("…  $((-(a⊙VL.v0))/(k^0.5))")
 
     V1Mat::Array{Integer,2} = reduce(hcat,[v.vec for v in VL.V1_basis])
     
     solutions = qsolve(Array{BigInt,2}(V1Mat' * VL.L.G * V1Mat), Array{BigInt,1}(V1Mat' * VL.L.G * a.vec), a⊙a - k)
     solutions_in_L::Array{QuadLatticeElement,1} = (x -> QuadLatticeElement(VL.L,V1Mat * x + a.vec)).(solutions)
      
+    @info "< roots_decomposed_into(VL, $(a.vec), $k)"
     return solutions_in_L
 end
 
+function enumerate_roots(VL;num=200)
+    
+    roots_by_distance = RootsByDistance(VL)
 
-function is_finite_volume(roots::Array{QuadLatticeElement,(1)})
-    false
+    while num > 0
+        r = next!(roots_by_distance)
+        println("$(r.vec) : $((sinh_distance_to_hyperplane(VL.v0,r))^2)")
+    end
 end
 
-function Vinberg_Algorithm(G)
+
+function is_finite_volume(roots::Array{QuadLatticeElement,(1)},VL::VinbergLattice)
+    Gram_matrix = Int.(reduce(hcat,[[r1⊙r2 for r1 in roots] for r2 in roots]))
+    println("gram matrix is ")
+    display(Gram_matrix)
+    Coxeter_matrix = Gram_to_Coxeter(Gram_matrix)
+    println("Coxeter matrix is")
+    display(Coxeter_matrix)
+    println()
+    println("-----------------------------------")
+    return isnothing(Coxeter_matrix) ? false : is_fin_vol(Coxeter_matrix,rank(VL.L)-1)
+    
+end
+
+function Vinberg_Algorithm(G;num_remaining_rounds=100)
 
     VL = VinbergLattice(G)
     v0 = VL.v0 
-
+    
+    println("v0 is $v0")
 
     roots::Array{QuadLatticeElement,(1)} = []
 
+    #append!(roots, roots_of_fundamental_cone(VL))
     append!(roots, roots_of_fundamental_cone(VL))
     
     println("cone roots are:")
@@ -455,19 +575,35 @@ function Vinberg_Algorithm(G)
 
     
 
-    num_remaining_rounds = 10
+    start = true
 
 
-    while ! is_finite_volume(roots) && num_remaining_rounds > 0
+    while start || ( ! is_finite_volume(roots,VL) && num_remaining_rounds > 0)
+        start = false
         num_remaining_rounds -= 1
+
         new_root = next!(new_roots_iterator)
-
-        if all((new_root⊙r) ≤ 0 for r in roots) && new_root⊙v0 < 0
-            push!(roots,new_root)
-            println("new root : $(new_root.vec)")
+        while new_root⊙v0 == 0 # skip roots at distance zero since they have been covered in FundPoly
+            new_root = next!(new_roots_iterator)
         end
-    end
 
+        println("trying $(new_root.vec)")
+        
+        while !(all((new_root⊙r) ≤ 0 for r in roots) && new_root⊙v0 < 0) && num_remaining_rounds > 0
+            num_remaining_rounds -= 1
+            new_root = next!(new_roots_iterator)
+            println("trying $(new_root.vec)")
+        end
+
+        println("new root : $(new_root.vec)")
+        push!(roots,new_root)
+    
+    end
+   
+    println("remaining rounds: $num_remaining_rounds")
+    println("decision?")
+    println(is_finite_volume(roots,VL))
+    println([r.vec for r in roots])
 
 end
 

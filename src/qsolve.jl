@@ -4,10 +4,13 @@
 using LinearAlgebra
 using AbstractAlgebra
 using Base
+using Polyhedra
 
 include("util.jl")
 
 function qform_minimum(A,b,γ)
+
+    #@info "> qform_minimum(…)"
     minushalf_b = -0.5 * b
     x = A \ minushalf_b 
     # then Ax = minushalf_b 
@@ -16,6 +19,7 @@ function qform_minimum(A,b,γ)
     #
     #println("qform_minimum($A,$b,$γ)…")
 
+    #@info "< qform_minimum(…)"
     return (x, x ⋅ (A*x) + b ⋅ x + γ)
 end
 
@@ -34,9 +38,16 @@ function solve_quadratic_poly(a,b,c)
 
 end
 
+# seems like their (B&P) version is way better than diagonalization + my naive check
+function qsolve_iterative(A,b,γ)
+
+end
+
 
 function bounding_box_diago(A,b,γ)
-    
+   
+    #@info "> bounding_box_diago(…)"
+
     @assert length(size(A)) == 1
     @assert isposdef(Diagonal(A))
 
@@ -55,29 +66,51 @@ function bounding_box_diago(A,b,γ)
 
     x,minval = qform_minimum_diago(A,b,γ)
     # could also have used x,minval = qform_minimum(Diagonal(A),b,γ)
-    
+   
+
     if minval ≥ 0
         return Set()
     end
 
     max = []
     min = []
+
+    #sol_plus = []
+    #sol_minus = []
+    
     for i in 1:n 
         sols = solve_quadratic_poly(A[i],2*A[i]*x[i] + b[i],minval) 
         #println("($i) solutions are $sols")
         @assert size(sols,1) == 2 "Should always have solutions because pos def I think"
+        @assert sols[1] < sols[2]
         push!(min,BigInt(round(x[i] + sols[1],digits=0))-1) 
         push!(max,BigInt(round(x[i] + sols[2],digits=0))+1) 
+        #push!(sol_minus,sols[1])
+        #push!(sol_plus,sols[2])
+        #println("$(min[end]) -- $(sol_minus[end]) -- $(sol_plus[end]) -- $(max[end])")
     end
+    
+#    quadrant(vv) = [vv[i] > x[i] ? (vv[i]-x[i],sol_plus[i]) : (-(vv[i]-x[i]),-sol_minus[i]) for i in 1:n]
+#    
+#    in_diamond(vv) = begin
+#        println("$vv gives $(quadrant(vv))")
+#        println(sum([ww[1]/ww[2] for ww in quadrant(vv)]))
+#        return sum([(ww[1]+1)/ww[2] for ww in quadrant(vv)]) < 1
+#    end
 
     bounding_box = [[]]
     for i in 1:n 
         bounding_box = [vcat(vec, val) for vec in bounding_box for val in min[i]:max[i]] 
     end
-    
 
-    return bounding_box
 
+    #@info "< bounding_box_diago(…)"
+    return [vv for vv in bounding_box]
+
+end
+
+function qsolve(A::Array{Int,2},b::Array{Int,1},γ::Int)
+    return qsolve_naive(BigInt.(A),BigInt.(b),BigInt.(γ))
 end
 
 function qsolve(A,b,γ)
@@ -93,6 +126,8 @@ function qsolve_naive(A::Array{BigInt,2},b::Array{BigInt,1},γ::BigInt)
 #    display(b)
 #    println("")
 #    println(" and γ as $γ")
+    
+    #@info "> qsolve_naive(…)"
 
     @assert issymmetric(A) "A must be symmetric"
     @assert isposdef(A) "A must be positive definite"
@@ -143,6 +178,7 @@ function qsolve_naive(A::Array{BigInt,2},b::Array{BigInt,1},γ::BigInt)
     end
     
 
+    #@info "< qsolve_naive(…)"
     return [BigInt.(s) for s in solutions] 
 end
 
@@ -186,7 +222,7 @@ function test_qsolve()
     b = [-1; -2]
     c = -220
     A = P'*D*P
-    @assert qsolve_naive(A,b,c) == Set(Any[BigFloat[8.0, -6.0]])
+    @assert qsolve(A,b,c) == Set(Any[BigFloat[8.0, -6.0]])
 
     D = [1 0;
          0 1]
@@ -195,7 +231,7 @@ function test_qsolve()
     b = [0; 0]
     c = -25
     A = P'*D*P
-    @assert qsolve_naive(A,b,c) == Set(Any[[-5.0, 0.0], [3.0, 4.0], [4.0, 3.0], [0.0, 5.0], [-4.0, -3.0], [3.0, -4.0], [0.0, -5.0], [4.0, -3.0], [-3.0, -4.0], [-3.0, 4.0], [5.0, 0.0], [-4.0, 3.0]])
+    @assert qsolve(A,b,c) == Set(Any[[-5.0, 0.0], [3.0, 4.0], [4.0, 3.0], [0.0, 5.0], [-4.0, -3.0], [3.0, -4.0], [0.0, -5.0], [4.0, -3.0], [-3.0, -4.0], [-3.0, 4.0], [5.0, 0.0], [-4.0, 3.0]])
 
 
 
@@ -217,3 +253,15 @@ function test_qsolve()
 
 
 end
+
+   D = [4 0 ;
+        0 1]
+    
+    P = [1 0;
+         0 1]
+    
+    A = P'*D*P
+    
+    b = [20; 20]
+    c = -26
+

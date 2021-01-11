@@ -644,6 +644,13 @@ end
 # ##########################
 #
 
+function is_fin_vol(D::Array{Int,2},dimension::Int)
+    
+    das = build_diagram_and_subs(D,dimension)
+    return is_finite_volume(das)
+
+end
+
 function is_compact_respectively_finvol(path::String)
     
     # Get file content in s as in https://en.wikibooks.org/wiki/Introducing_Julia/Working_with_text_files

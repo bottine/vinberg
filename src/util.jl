@@ -163,7 +163,9 @@ function is_necessary_hyperplane(cone_roots::Array{Array{BigInt,1},1},A::Array{B
     n = size(A,1)
     @assert size(A) == (n,n)
     @assert A' == A
-    
+   
+
+
     # x' * (A * r) ≤ 0 ∀ r
     # (A * r)' * x ≤ 0 ∀ r
 
@@ -176,13 +178,13 @@ function is_necessary_hyperplane(cone_roots::Array{Array{BigInt,1},1},A::Array{B
     # it should only be strictly bigger than zero, but Convex.jl does not do "strictly", so we change it to ≥ 1 (and since we have a cone, it should be the same result)
 
     
-    solve!(p,Cbc.Optimizer(verbose=0), verbose=false)
+    solve!(p,Cbc.Optimizer(verbose=0,loglevel=0), verbose=false)
    
 
     if p.status == MathOptInterface.INFEASIBLE 
         return false
     elseif p.status == MathOptInterface.OPTIMAL
-        println(p.optval)
+        #println(p.optval)
         return true
     else
         println("can't tell!")
@@ -190,3 +192,33 @@ function is_necessary_hyperplane(cone_roots::Array{Array{BigInt,1},1},A::Array{B
 
 
 end
+
+function Gram_to_Coxeter(G::Matrix{Int})
+    # stolen from B&P
+    function weight(M, i, j)
+        cos2 = (M[i,j]*M[i,j])//(M[i,i]*M[j,j])
+        if cos2 == 0
+            return 2
+        elseif cos2 == 1//4
+            return 3
+        elseif cos2 == 1//2
+            return 4
+        elseif cos2 == 3//4
+            return 6
+        elseif cos2 == 1
+            return 0
+        elseif cos2 > 1
+            return 1
+        else
+            return nothing
+        end
+    end
+    Coxeter_matrix = reduce(hcat,[[weight(G,i,j) for i in 1:size(G,1)] for j in 1:size(G,2)])
+    if any(g == nothing for g in Coxeter_matrix)
+        return nothing
+    else
+        return Coxeter_matrix
+    end
+
+end
+
