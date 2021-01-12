@@ -27,11 +27,21 @@ function diagonalize(A)
        
       
         # look at non zero diagonal entries
-        non_zero_diag = sort([k for k in i0:n if M[k,k] ≠ 0],by=(k -> abs(M[k,k])))
+        non_zero_diag = [k for k in i0:n if M[k,k] ≠ 0]
+        non_zero_diag = sort!(non_zero_diag,by=(k -> abs(M[k,k])))
 
-
+#        println("====================")
+#        println("i0 = $i0")
+#        display(M)
+#        println("")
+#        println("non_zero_diag = $non_zero_diag")
+#    
         if length(non_zero_diag) == 0
-            (i,j) = sort([(i,j) for  i in i0:n, j in i0:n if M[i,j]≠0], by=((i,j)-> abs(M[i,j])))[1]
+            non_zero_coordinates = [(i,j) for  i in i0:n, j in i0:n if M[i,j]≠0]
+            if isempty(non_zero_coordinates)
+                break
+            end
+            (i,j) = (sort(non_zero_coordinates, by=(x-> abs(M[x[1],x[2]]))))[1]
             M[i,:] = M[i,:] + M[j,:]
             M[:,i] = M[:,i] + M[:,j]
         else
@@ -153,7 +163,7 @@ function test_get_integer_points()
 end
 
 
-function is_necessary_hyperplane(cone_roots::Array{Array{BigInt,1},1},A::Array{BigInt,2},root::Array{BigInt,1})
+function is_necessary_hyperplane(cone_roots::Array{Array{Int,1},1},A::Array{Int,2},root::Array{Int,1})
 #function is_necessary_hyperplane(cone_roots,A,root)
     # The elements of cone_roots are roots of the lattice, and the cone they represent 
     # is the elements x in real space satisfying x'*A*r ≤ 0 for all r in cone_roots.

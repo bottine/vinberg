@@ -8,11 +8,17 @@ using Polyhedra
 
 include("util.jl")
 
-function qform_minimum(A,b,γ)
+function qform_minimum(A::Array{Int,2},b::Array{Int,1},γ::Int)
 
     #@info "> qform_minimum(…)"
-    minushalf_b = -0.5 * b
-    x = A \ minushalf_b 
+    minushalf_b = -b//2
+    x = A \ minushalf_b
+    
+    # Exact computations:
+    #A_inv = inv(Rational{Int}.(A))
+    #xbis = A_inv * minushalf_b
+    #println("$xbis vs $x")
+    
     # then Ax = minushalf_b 
 
     # returns a minimum vector x for the quadratic polynomial, and its value
@@ -24,27 +30,111 @@ function qform_minimum(A,b,γ)
 end
 
 
-function solve_quadratic_poly(a,b,c)
+function solve_quadratic_poly(a::Int,b::Int,c::Int;depth::Int=0)
     
-    #println("lookking for sols of $a x² + $b x + $c == 0")
+    ##println("|  "^depth * " ", "lookking for sols of $a x² + $b x + $c == 0")
 
     Δ = b^2 - 4*a*c
+    ##println("|  "^depth * " ", "Δ is $Δ")
     if Δ ≥ 0
         δ = sqrt(Δ)
-        return [(-b-δ)/2,(-b+δ)/2]
+        ##println("|  "^depth * " ", "returning ", [(-b-δ)/(2*a),(-b+δ)/(2*a)])
+        return [(-b-δ)/(2*a),(-b+δ)/(2*a)]
     else
         return []
     end
-
 end
+
+function solve_quadratic_poly(a::BigInt,b::BigFloat,c::BigFloat;depth::Int=0)
+    
+    #println("|  "^depth * " ", "lookking for sols of $a x² + $b x + $c == 0")
+
+    Δ = b^2 - 4*a*c
+    #println("|  "^depth * " ", "Δ is $Δ")
+    if Δ ≥ 0
+        δ = sqrt(Δ)
+        #println("|  "^depth * " ", "returning ", [(-b-δ)/(2*a),(-b+δ)/(2*a)])
+        return [(-b-δ)/(2*a),(-b+δ)/(2*a)]
+    else
+        return []
+    end
+end
+
 
 # seems like their (B&P) version is way better than diagonalization + my naive check
-function qsolve_iterative(A,b,γ)
+function qsolve_iterative(A::Array{Int,2},b::Array{Int,1},γ::Int;depth=1)
+    
+    #println("|  "^depth * " ", "qsolve_iterative($A,$b,$γ)")
 
+    if size(A) == (1,1) && size(b) == (1,)
+        #println("|  "^depth * " ", "dim = 1")
+        a = A[1,1]
+        b = b[1]
+        sols = solve_quadratic_poly(a,b,γ;depth=depth+1)
+        if sols == []
+            return nothing
+        else
+            x₁,x₂ = Int(round(sols[1],digits=0)),Int(round(sols[2],digits=0))
+            ##println("|  "^depth * " ", "$x₁ and $x₂")
+            integer_sols = []
+            if a*x₁^2 + b*x₁ + γ == 0
+                push!(integer_sols,x₁)
+            end
+            if a*x₂^2 + b*x₂ + γ == 0
+                push!(integer_sols,x₂)
+            end
+            ##println("|  "^depth * " ", "$a x² + $b x + $γ = 0 ", integer_sols)
+            return integer_sols
+        end
+    end
+
+    (min_point,min_val) = qform_minimum(A,b,γ)
+    #println("|  "^depth * " ", "min_point = $min_point")
+    #println("|  "^depth * " ", "min_val = $min_val")
+    
+    # TODO taken from B&P but makes me queasy
+    # TODO can do without the arbitrary error term they use?
+    if min_val > 0 
+        return nothing
+    end
+    x = min_point[end]
+
+    sols = []
+
+    x_floor = Int(round(x,digits=0))
+    x_ceil = Int(round(x,digits=0)) + 1
+
+
+    A_(y) = A[1:end-1,1:end-1]
+    b_(y) = b[1:end-1] + y*A[end,1:end-1] + y*A[1:end-1,end]
+    γ_(y) = A[end,end]*y^2 +b[end]*y + γ
+
+
+    y = x_floor
+    #println("|  "^depth * " ", "trying $y")
+    sols_y = qsolve_iterative(A_(y),b_(y),γ_(y);depth=depth+1)
+    while sols_y ≠ nothing
+        append!(sols,[vcat(sol,[y]) for sol in sols_y])
+        y -= 1
+        #println("|  "^depth * " ", "trying $y")
+        sols_y = qsolve_iterative(A_(y),b_(y),γ_(y);depth=depth+1)
+    end
+    
+    y = x_ceil
+    #println("|  "^depth * " ", "trying $y")
+    sols_y = qsolve_iterative(A_(y),b_(y),γ_(y);depth=depth+1)
+    while sols_y ≠ nothing
+        append!(sols,[vcat(sol,[y]) for sol in sols_y])
+        y += 1
+        #println("|  "^depth * " ", "trying $y")
+        sols_y = qsolve_iterative(A_(y),b_(y),γ_(y);depth=depth+1)
+    end
+    #println("|  "^depth * " ", "got $sols")
+    return [s for s in Set(sols)]
 end
 
 
-function bounding_box_diago(A,b,γ)
+function bounding_box_diago(A::Array{BigInt,1},b::Array{BigInt,1},γ::BigInt)
    
     #@info "> bounding_box_diago(…)"
 
@@ -110,11 +200,11 @@ function bounding_box_diago(A,b,γ)
 end
 
 function qsolve(A::Array{Int,2},b::Array{Int,1},γ::Int)
-    return qsolve_naive(BigInt.(A),BigInt.(b),BigInt.(γ))
+    return qsolve_iterative(A,b,γ)
 end
 
-function qsolve(A,b,γ)
-    return qsolve_naive(A,b,γ)
+function qsolve_naive(A::Array{Int,2},b::Array{Int,1},γ::Int)
+    return qsolve_naive(BigInt.(A),BigInt.(b),BigInt(γ))
 end
 
 function qsolve_naive(A::Array{BigInt,2},b::Array{BigInt,1},γ::BigInt)
@@ -251,7 +341,7 @@ function test_qsolve()
     
     println(qsolve(A,b,c))
 
-
+    #qsolve_naive(BigInt.([2 -1 0; -1 2 -1;0 -1 2]) , BigInt.([0, 0, 0]) , BigInt(-12))
 end
 
    D = [4 0 ;
