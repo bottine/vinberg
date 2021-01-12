@@ -114,11 +114,17 @@ function Base.:(==)(L1::VinbergLattice,L2::VinbergLattice)
     @assert false "Let's not compare vinberg lattices yet"
 end
 
-function VinbergLattice(G)
+
+function VinbergLattice(G::Array{Int,2};v0vec::Union{Array{Int,1},Nothing}=nothing)
+   
     assert_sig_n_1_matrix(G)
-        
+    
+
     L = QuadLattice(G)
-    v0 = negative_vector(L)
+    v0 = (v0vec == nothing ? negative_vector(L) : QuadLatticeElement(L,v0vec))
+    
+    @assert norm(v0) < 0
+
     V1_basis = basis_of_orhogonal_complement(L,v0)
 
     @info "V1_basis is $([v.vec for v in V1_basis])"
@@ -138,8 +144,7 @@ function VinbergLattice(G)
     v0norm = v0⊙v0
 
 
-    return VinbergLattice(L,v0,V1_basis,W_reps,v0vec_times_G,v0norm)
-
+    return VinbergLattice(L,v0,V1_basis,W_reps,v0vec_times_G,v0norm)   
 end
 
 function Base.convert(v::QuadLatticeElement) 
@@ -400,7 +405,7 @@ mutable struct RootsByDistance
     VL::VinbergLattice
     next_least_a0_for_k_and_w::Union{Nothing,Dict{Tuple{Int,QuadLatticeElement},Tuple{Int,Int}}}
     current_a0_and_k_and_w::Union{Nothing,Tuple{Int,Int,QuadLatticeElement}}
-    roots_for_current_a0_and_k_and_w::Set{QuadLatticeElement}
+    roots_for_current_a0_and_k_and_w::Vector{QuadLatticeElement}
     
 end
 
@@ -425,7 +430,7 @@ function RootsByDistance(VL::VinbergLattice;no_distance_zero=false)
 
     current_a0_and_k_and_w::Union{Nothing,Tuple{Int,Int,QuadLatticeElement}} = nothing;
     #current_a0_and_k_and_w = nothing;
-    roots_for_current_a0_and_k_and_w::Set{QuadLatticeElement} = Set()
+    roots_for_current_a0_and_k_and_w::Vector{QuadLatticeElement} = Vector{QuadLatticeElement}()
     
     @info "< RootsByDistance(…)"
     
@@ -474,9 +479,9 @@ function next!(r::RootsByDistance)
             a0minus -= 1
         end
         r.next_least_a0_for_k_and_w[(k,w)] = (a0plus,a0minus)
-        r.roots_for_current_a0_and_k_and_w = filter(is_root,Set(roots_decomposed_into(r.VL,a0*v0 + w,k)))
+        r.roots_for_current_a0_and_k_and_w = filter(is_root,roots_decomposed_into(r.VL,a0*v0 + w,k))
     end
-    
+ 
     #@info "< next!(roots_by_distance)"
     return pop!(r.roots_for_current_a0_and_k_and_w)
 
@@ -538,11 +543,14 @@ function is_finite_volume(roots::Array{QuadLatticeElement,(1)},VL::VinbergLattic
     
 end
 
-function Vinberg_Algorithm(G;num_remaining_rounds=100)
+function Vinberg_Algorithm(G;v0vec=nothing,num_remaining_rounds=100)
+        
 
-    VL = VinbergLattice(G)
+    VL = VinbergLattice(G;v0vec=v0vec)
+    
     v0 = VL.v0 
     
+
     println("v0 is $v0")
 
     roots::Array{QuadLatticeElement,(1)} = []
