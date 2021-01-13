@@ -532,13 +532,13 @@ end
 
 function is_finite_volume(roots::Array{QuadLatticeElement,(1)},VL::VinbergLattice)
     Gram_matrix = Int.(reduce(hcat,[[r1⊙r2 for r1 in roots] for r2 in roots]))
-    println("gram matrix is ")
-    display(Gram_matrix)
+    #println("gram matrix is ")
+    #display(Gram_matrix)
     Coxeter_matrix = Gram_to_Coxeter(Gram_matrix)
-    println("Coxeter matrix is")
-    display(Coxeter_matrix)
-    println()
-    println("-----------------------------------")
+    #println("Coxeter matrix is")
+    #display(Coxeter_matrix)
+    #println()
+    #println("-----------------------------------")
     return isnothing(Coxeter_matrix) ? false : is_fin_vol(Coxeter_matrix,rank(VL.L)-1)
     
 end
@@ -583,19 +583,19 @@ function Vinberg_Algorithm(G;v0vec=nothing,num_remaining_rounds=100)
             new_root = next!(new_roots_iterator)
         end
 
-        println("($(length(roots)))trying $(new_root.vec)             [$(distance_to_hyperplane(v0,new_root))]")
+        #println("($(length(roots)))trying $(new_root.vec)             [$(distance_to_hyperplane(v0,new_root))]")
         
         #while !(all((new_root⊙r) ≤ 0 for r in roots) && times_v0(VL,new_root) < 0) && num_remaining_rounds > 0
         while !(all(pt * new_root.vec ≤ 0 for pt in partial_times) && times_v0(VL,new_root) < 0) && num_remaining_rounds > 0
             num_remaining_rounds -= 1
             new_root = next!(new_roots_iterator)
-            println("($(length(roots)))trying $(new_root.vec)            [$(distance_to_hyperplane(v0,new_root))]")
+            #println("($(length(roots)))trying $(new_root.vec)            [$(distance_to_hyperplane(v0,new_root))]")
         end
 
-        println("new root : $(new_root.vec)")
+        #println("new root : $(new_root.vec)")
         push!(roots,new_root)
         push!(partial_times,new_root.vec' * G)
-        println("now have : $([r.vec for r in roots])")
+        #println("now have : $([r.vec for r in roots])")
 
     end
    
@@ -607,6 +607,7 @@ function Vinberg_Algorithm(G;v0vec=nothing,num_remaining_rounds=100)
     roots = drop_redundant_roots(roots)
     println(length(roots))
     println("remaining rounds: $num_remaining_rounds")
+    return [r.vec for r in roots]
 
 end
 
@@ -633,11 +634,13 @@ Gug_625 = [-1 0 0 0;
             0 0 6 0;
             0 0 0 6]
 
+include("Some_Lattices.jl")
+function test_some_lattices()
+    for (name,matrix,basepoint,roots,rounds) in Lattice_table
+        println("Checking $name")
+        @assert Vinberg_Algorithm(matrix;v0vec=basepoint,num_remaining_rounds=rounds) == roots 
+    end
+end
 
 
 
-#test_diagonalize()
-#Vinberg_Algorithm(G0)
-#Vinberg_Algorithm(G1)
-#Vinberg_Algorithm(G2)
-#Vinberg_Algorithm(G)
