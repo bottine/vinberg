@@ -17,19 +17,25 @@ function ⊕(M1,M2)
 end
 
 U = [0 1; 1 0]
-A_(n) = Matrix(I(n))
+A_(n) = Matrix(SymTridiagonal([2 for i in 1:n], [1 for i in 1:n-1]))
+
+I_ = I(1)
 
 # Using Vinberg's L(n) naming convention
 
-Vin07_L1 = 4*U ⊕ 2*A_(1)  ⊕ 2*A_(1)
-Vin07_L2 = 2*U ⊕ 2*A_(1)  ⊕ 2*A_(1)
-Vin07_L3 = 1*U ⊕ 2*A_(1)  ⊕ 2*A_(1)
-Vin07_L4 = 3*U ⊕ 2*A_(1)  ⊕ 2*A_(1)
-Vin07_L5 = (-4)*A_(1) ⊕ A_(3)
-Vin07_L6 = U ⊕ 2*A_(1)  ⊕ 8*A_(1)
+Vin07_L1 = 4*U ⊕ 2*I_  ⊕ 2*I_
+Vin07_L2 = 2*U ⊕ 2*I_  ⊕ 2*I_
+Vin07_L3 = 1*U ⊕ 2*I_  ⊕ 2*I_
+Vin07_L4 = 3*U ⊕ 2*I_  ⊕ 2*I_
+Vin07_L5 = (-4)*I_ ⊕ A_(3)
+Vin07_L6 = U ⊕ 2*I_  ⊕ 8*I_
 
 Vin07_L15 = U ⊕ [2 1;1 10]
 Vin07_L16 = U ⊕ [2 1;1 4] 
 Vin07_L17 = U ⊕ [2 1;1 14] 
 Vin07_L18 = U ⊕ [2 0;0 4] 
-Vin07_L19 = 8*A_(1) ⊕ A_(3)
+Vin07_L19 = 8*I_ ⊕ A_(3)
+
+# From B&P
+
+BP18_12 = U ⊕ 36*I_ ⊕ 6*I_

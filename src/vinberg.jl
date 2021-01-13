@@ -24,7 +24,7 @@ import Base: vec, convert
 include("util.jl")
 include("qsolve.jl")
 include("diagrams.jl")
-include("Vin2007_Lattices.jl")
+include("Some_Lattices.jl")
 
 struct QuadLattice
     n_pos::Int
