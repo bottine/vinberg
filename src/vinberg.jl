@@ -638,7 +638,7 @@ include("Some_Lattices.jl")
 function test_some_lattices()
     for (name,matrix,basepoint,roots,rounds) in Lattice_table
         println("Checking $name")
-        @assert Vinberg_Algorithm(matrix;v0vec=basepoint,num_remaining_rounds=rounds) == roots 
+        @assert Vinberg_Algorithm(matrix;v0vec=basepoint,num_remaining_rounds=rounds) == roots "$name failed!" 
     end
 end
 
