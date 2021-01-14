@@ -546,7 +546,7 @@ end
 function Vinberg_Algorithm(VL::VinbergLattice;rounds=nothing)
 
    
-    decrease!(r) = (r === nothing ? r=nothing : r=r-1)
+    @inline decrease!(r) = (r === nothing ? r=nothing : r=r-1)
     geqzero(r) = (r=== nothing ? true : r ≥ 0)
 
     v0 = VL.v0
@@ -594,7 +594,7 @@ function Vinberg_Algorithm(VL::VinbergLattice;rounds=nothing)
 
     end
    
-    println("Decision $(rounds) :", is_finite_volume(roots,VL))
+    println("Decision ($(rounds)) :", is_finite_volume(roots,VL))
     println("can we drop hyperplanes? $(length(roots)) vs $(length(drop_redundant_roots(roots)))")
     return [r.vec for r in roots]
 
@@ -638,11 +638,10 @@ function write_all_lattices()
     end
 end
 
-function Vinberg_Algorithm_JSON_output(path;v0vec=nothing)
-    G = txtmat_path_to_matrix(path)
-    VL = VinbergLattice(G,v0vec=v0vec)
-    roots,time = @timed Vinberg_Algorithm(VL)
-    v0vec = VL.v0.vec
+function Vinberg_Algorithm_JSON_output(folder,path;v0vec=nothing)
+    G = txtmat_path_to_matrix(joinpath(folder,path))
+    roots,time = @timed Vinberg_Algorithm(VinbergLattice(G,v0vec=v0vec))
+    v0vec = VinbergLattice(G,v0vec=v0vec).v0.vec
     return JSON.json(Dict("path"=>path,"matrix"=>G,"v0"=>v0vec,"roots"=>roots,"time"=>time))
 end
 
@@ -658,6 +657,9 @@ end
 
 
 function test_suite()
+
+    seen = []
+
     open("lattices/known_values.json", "r") do io
        
         # https://gist.github.com/silgon/0ba43e00e0749cdf4f8d244e67cd9d6a
@@ -670,7 +672,8 @@ function test_suite()
             v0vec = Array{Int,1}(entry["v0"])
             roots = Array{Array{Int,1},1}(entry["roots"])
             time = Float64(entry["time"])
-        
+            
+            push!(seen,path)
         
             G = txtmat_path_to_matrix("lattices/"*path)
             @assert G == matrix
@@ -685,7 +688,24 @@ function test_suite()
             if my_time > time
                 println("Taking too long! ($my_time vs $time)")
             end
+            
+
 
         end
+        
+        println("looked at $seen")
+        new = ""
+        for (root, dirs, files) in walkdir("lattices/")
+            for path in files
+                if  endswith(path,".lat") && path ∉ seen
+                    println("One more: $path")
+                    new *= Vinberg_Algorithm_JSON_output("lattices/",path) * ",\n"
+                end
+            end
+        end
+
+        println("new matrices:")
+        println(new)
+
     end
 end

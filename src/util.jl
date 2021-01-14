@@ -253,7 +253,6 @@ function txtmat_to_matrix(descr)
             entries = split(m[:entries])
             if ! isempty(entries)
                 int_entries = (x->parse(Int,x)).(entries)
-                println(int_entries)
                 push!(M,int_entries)
             end
         end
