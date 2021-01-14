@@ -16,7 +16,7 @@ function diagonalize(A)
     # algorithm copied from there https://math.stackexchange.com/questions/1388421/reference-for-linear-algebra-books-that-teach-reverse-hermite-method-for-symmetr
     # plus a gcd step to reduce the growth of values
     # plus the "Case 0" step to further reduce, but it's not enough
-    
+    @assert issymmetric(A) "A must be symmetric."
 
     A = BigInt.(A)
 
@@ -232,3 +232,46 @@ function Gram_to_Coxeter(G::Matrix{Int})
 
 end
 
+function txtmat_path_to_matrix(path)
+    s = open(path) do file
+        read(file, String)
+    end
+
+    return txtmat_to_matrix(s)
+end
+
+function txtmat_to_matrix(descr)
+   
+    lines = split(descr,"\n")
+    @assert length(lines) ≥ 2 "CoxIter graph description must have non trivial content!"
+    
+    M = []
+    
+    for line in lines
+        m = match(r"^(?<entries>(\s*-?\d+)*)\s*(?<comment>#.*)?$", line)
+        if m ≠ nothing # labelled vertice
+            entries = split(m[:entries])
+            if ! isempty(entries)
+                int_entries = (x->parse(Int,x)).(entries)
+                println(int_entries)
+                push!(M,int_entries)
+            end
+        end
+    end
+    
+    Mat = hcat(M...)
+    
+    return Mat
+
+end
+
+function matrix_to_txtmat(Mat)
+    return join([join(string.(line)," ") for line in eachrow(Mat)], "\n") 
+end
+
+function matrix_to_txtmat_path(Mat, path)
+
+    s = open(path,"w") do file
+        print(file, matrix_to_txtmat(Mat))
+    end
+end

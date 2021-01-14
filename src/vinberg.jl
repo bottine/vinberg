@@ -4,6 +4,7 @@ using AbstractAlgebra
 using LinearAlgebra
 using Polyhedra
 using CDDLib
+using JSON
 
 
 import Base: vec, convert
@@ -127,7 +128,6 @@ function VinbergLattice(G::Array{Int,2};v0vec::Union{Array{Int,1},Nothing}=nothi
 
     V1_basis = basis_of_orhogonal_complement(L,v0)
 
-    @info "V1_basis is $([v.vec for v in V1_basis])"
 
     M = Matrix(reshape(v0.vec,(rank(L),1)))
     for v in V1_basis
@@ -140,7 +140,6 @@ function VinbergLattice(G::Array{Int,2};v0vec::Union{Array{Int,1},Nothing}=nothi
     @assert norm(v0) % length(W_reps) == 0
    
     v0vec_times_G = v0.vec' *  G
-    println("v0voc_times_G = $v0vec_times_G")
     v0norm = v0⊙v0
 
 
@@ -374,7 +373,6 @@ function roots_of_fundamental_cone(VL::VinbergLattice)
 
 
     possible_roots = roots_in_V1(VL) 
-    @info "possible_roots are: $([r.vec for r in possible_roots])"
 
     cone_roots::Vector{QuadLatticeElement} = Vector()
     for r in possible_roots
@@ -387,7 +385,6 @@ function roots_of_fundamental_cone(VL::VinbergLattice)
             #println("compatible with other roots")
             # TODO I added the condition r⊙cr≤0 but I'm not sure it's good to have it there
             if is_necessary_hyperplane(cone_roots, r) && is_necessary_hyperplane(cone_roots, (-1)*r)
-                println("adding $(r.vec)")
                 push!(cone_roots,r)
                 cone_roots = drop_redundant_roots(cone_roots)
             end
@@ -411,7 +408,6 @@ end
 
 function RootsByDistance(VL::VinbergLattice;no_distance_zero=false)
     
-    @info "> RootsByDistance(…)"
     v0 = VL.v0
 
     W_reps = VL.W_reps
@@ -426,13 +422,11 @@ function RootsByDistance(VL::VinbergLattice;no_distance_zero=false)
         push!(next_least_a0_for_k_and_w, (k,w) => (least_plus,least_minus))
     end
 
-    @info "W_reps has cardinality $(length(VL.W_reps)) and the number of possible root lengths is $(length(root_lengths(VL.L)))"
 
     current_a0_and_k_and_w::Union{Nothing,Tuple{Int,Int,QuadLatticeElement}} = nothing;
     #current_a0_and_k_and_w = nothing;
     roots_for_current_a0_and_k_and_w::Vector{QuadLatticeElement} = Vector{QuadLatticeElement}()
     
-    @info "< RootsByDistance(…)"
     
     return RootsByDistance(VL,next_least_a0_for_k_and_w,current_a0_and_k_and_w,roots_for_current_a0_and_k_and_w)
 
@@ -543,15 +537,22 @@ function is_finite_volume(roots::Array{QuadLatticeElement,(1)},VL::VinbergLattic
     
 end
 
-function Vinberg_Algorithm(G;v0vec=nothing,num_remaining_rounds=100)
-        
 
+function Vinberg_Algorithm(G::Array{Int,2};v0vec::Union{Array{Int,1},Nothing}=nothing,rounds=nothing)
     VL = VinbergLattice(G;v0vec=v0vec)
-    
-    v0 = VL.v0 
+    return Vinberg_Algorithm(VL;rounds=rounds)
+end
+
+function Vinberg_Algorithm(VL::VinbergLattice;rounds=nothing)
+
+   
+    decrease!(r) = (r === nothing ? r=nothing : r=r-1)
+    geqzero(r) = (r=== nothing ? true : r ≥ 0)
+
+    v0 = VL.v0
+    G = VL.L.G
     
 
-    println("v0 is $v0")
 
     roots::Array{QuadLatticeElement,(1)} = []
     partial_times = []
@@ -559,24 +560,16 @@ function Vinberg_Algorithm(G;v0vec=nothing,num_remaining_rounds=100)
     append!(roots, roots_of_fundamental_cone(VL))
     partial_times = [r.vec' * G for r in roots]
 
-    println("cone roots are:")
-    for r in roots
-        println(r.vec)
-    end
-    println("----------------")
-    
-    
 
     new_roots_iterator = RootsByDistance(VL)
-
-    
 
     start = true
 
 
-    while start || ( ! is_finite_volume(roots,VL) && num_remaining_rounds > 0)
+    while start || ( ! is_finite_volume(roots,VL) && geqzero(rounds))
         start = false
-        num_remaining_rounds -= 1
+        
+
 
         new_root = next!(new_roots_iterator)
         while new_root⊙v0 == 0 # skip roots at distance zero since they have been covered in FundPoly
@@ -586,8 +579,10 @@ function Vinberg_Algorithm(G;v0vec=nothing,num_remaining_rounds=100)
         #println("($(length(roots)))trying $(new_root.vec)             [$(distance_to_hyperplane(v0,new_root))]")
         
         #while !(all((new_root⊙r) ≤ 0 for r in roots) && times_v0(VL,new_root) < 0) && num_remaining_rounds > 0
-        while !(all(pt * new_root.vec ≤ 0 for pt in partial_times) && times_v0(VL,new_root) < 0) && num_remaining_rounds > 0
-            num_remaining_rounds -= 1
+        while !(all(pt * new_root.vec ≤ 0 for pt in partial_times) && times_v0(VL,new_root) < 0) && geqzero(rounds) 
+            decrease!(rounds)
+
+
             new_root = next!(new_roots_iterator)
             #println("($(length(roots)))trying $(new_root.vec)            [$(distance_to_hyperplane(v0,new_root))]")
         end
@@ -599,14 +594,8 @@ function Vinberg_Algorithm(G;v0vec=nothing,num_remaining_rounds=100)
 
     end
    
-    println("decision?")
-    println(is_finite_volume(roots,VL))
-    println([r.vec for r in roots])
-
-    println("can we drop hyperplanes? $(length(roots))")
-    roots = drop_redundant_roots(roots)
-    println(length(roots))
-    println("remaining rounds: $num_remaining_rounds")
+    println("Decision $(rounds) :", is_finite_volume(roots,VL))
+    println("can we drop hyperplanes? $(length(roots)) vs $(length(drop_redundant_roots(roots)))")
     return [r.vec for r in roots]
 
 end
@@ -638,9 +627,65 @@ include("Some_Lattices.jl")
 function test_some_lattices()
     for (name,matrix,basepoint,roots,rounds) in Lattice_table
         println("Checking $name")
-        @assert Vinberg_Algorithm(matrix;v0vec=basepoint,num_remaining_rounds=rounds) == roots "$name failed!" 
+        @assert Vinberg_Algorithm(matrix;v0vec=basepoint,rounds=rounds) == roots "$name failed!" 
     end
 end
 
+function write_all_lattices()
+    for (name,matrix,basepoint,roots,rounds) in Lattice_table
+        println("Checking $name")
+        matrix_to_txtmat_path(matrix,"lattices/$name")
+    end
+end
+
+function Vinberg_Algorithm_JSON_output(path;v0vec=nothing)
+    G = txtmat_path_to_matrix(path)
+    VL = VinbergLattice(G,v0vec=v0vec)
+    roots,time = @timed Vinberg_Algorithm(VL)
+    v0vec = VL.v0.vec
+    return JSON.json(Dict("path"=>path,"matrix"=>G,"v0"=>v0vec,"roots"=>roots,"time"=>time))
+end
 
 
+function all_json_output()
+    outs = []
+    for (name,matrix,basepoint,roots,rounds) in Lattice_table
+        push!(outs,"\t" * Vinberg_Algorithm_JSON_output("lattices/"*name,v0vec=basepoint))
+    end
+    
+    return "["*join(outs,", ")*"]"
+end
+
+
+function test_suite()
+    open("lattices/known_values.json", "r") do io
+       
+        # https://gist.github.com/silgon/0ba43e00e0749cdf4f8d244e67cd9d6a
+        all_entries = read(io,String)  # file information to string
+        known_values = JSON.parse(all_entries)
+
+        for entry in known_values
+            path = String(entry["path"])
+            matrix = Array{Int,2}(hcat(entry["matrix"]...))
+            v0vec = Array{Int,1}(entry["v0"])
+            roots = Array{Array{Int,1},1}(entry["roots"])
+            time = Float64(entry["time"])
+        
+        
+            G = txtmat_path_to_matrix("lattices/"*path)
+            @assert G == matrix
+            println("Looking at $path:")
+            my_roots,my_time = @timed Vinberg_Algorithm(VinbergLattice(G,v0vec=v0vec))
+            
+            if my_roots ≠ roots
+                println("ERROR on roots")
+                @assert false
+            end
+            println("Time change:", round(100*my_time/time,digits=1))
+            if my_time > time
+                println("Taking too long! ($my_time vs $time)")
+            end
+
+        end
+    end
+end
