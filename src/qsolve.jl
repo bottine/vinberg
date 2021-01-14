@@ -13,7 +13,6 @@ function qform_minimum(A::SMatrix{rank,rank,Int},b::SVector{rank,Int},γ::Int) w
     #@info "> qform_minimum(…)"
     minushalf_b = -b//2
     x = A \ minushalf_b
-    
     # Exact computations:
     #A_inv = inv(Rational{Int}.(A))
     #xbis = A_inv * minushalf_b
@@ -61,32 +60,40 @@ function solve_quadratic_poly(a::BigInt,b::BigFloat,c::BigFloat;depth::Int=0)
 end
 
 
-# seems like their (B&P) version is way better than diagonalization + my naive check
-function qsolve_iterative(A::SMatrix{rank,rank,Int},b::SVector{rank, Int},γ::Int;depth=1) where {rank}
+function qsolve_iterative(A::SMatrix{1,1,Int},b::SVector{1, Int},γ::Int;depth=1) where {rank}
     
     #println("|  "^depth * " ", "qsolve_iterative($A,$b,$γ)")
-
-    if size(A) == (1,1) && size(b) == (1,)
-        #println("|  "^depth * " ", "dim = 1")
-        a = A[1,1]
-        b = b[1]
-        sols = solve_quadratic_poly(a,b,γ;depth=depth+1)
-        if sols == []
-            return nothing
-        else
-            x₁,x₂ = Int(round(sols[1],digits=0)),Int(round(sols[2],digits=0))
-            ##println("|  "^depth * " ", "$x₁ and $x₂")
-            integer_sols = []
-            if a*x₁^2 + b*x₁ + γ == 0
-                push!(integer_sols,x₁)
-            end
-            if a*x₂^2 + b*x₂ + γ == 0
+    
+    a = A[1,1]
+    b = b[1]
+    sols = solve_quadratic_poly(a,b,γ;depth=depth+1)
+    if sols == []
+        return nothing
+    else
+        x₁,x₂ = Int(round(sols[1],digits=0)),Int(round(sols[2],digits=0))
+        ##println("|  "^depth * " ", "$x₁ and $x₂")
+        integer_sols = []
+        if a*x₁^2 + b*x₁ + γ == 0
+            push!(integer_sols,x₁)
+        end
+        if a*x₂^2 + b*x₂ + γ == 0
+            if x₂ ∉ integer_sols
                 push!(integer_sols,x₂)
             end
-            ##println("|  "^depth * " ", "$a x² + $b x + $γ = 0 ", integer_sols)
-            return integer_sols
         end
+        ##println("|  "^depth * " ", "$a x² + $b x + $γ = 0 ", integer_sols)
+        return integer_sols
     end
+   
+end
+
+# seems like their (B&P) version is way better than diagonalization + my naive check
+function qsolve_iterative(A::SMatrix{rank,rank,Int},b::SVector{rank, Int},γ::Int;depth=1) where {rank}
+        
+
+    #println("|  "^depth * " ", "qsolve_iterative($A,$b,$γ)")
+
+    @assert rank > 1 "Rank 1 case treated above"
 
     (min_point,min_val) = qform_minimum(A,b,γ)
     #println("|  "^depth * " ", "min_point = $min_point")
@@ -98,8 +105,7 @@ function qsolve_iterative(A::SMatrix{rank,rank,Int},b::SVector{rank, Int},γ::In
         return nothing
     end
     x = min_point[end]
-
-    sols = []
+    sols::Vector{SVector{rank,Int}} = []
 
     x_floor = Int(round(x,digits=0))
     x_ceil = Int(round(x,digits=0)) + 1
@@ -114,7 +120,7 @@ function qsolve_iterative(A::SMatrix{rank,rank,Int},b::SVector{rank, Int},γ::In
     #println("|  "^depth * " ", "trying $y")
     sols_y = qsolve_iterative(A_(y),b_(y),γ_(y);depth=depth+1)
     while sols_y ≠ nothing
-        append!(sols,[vcat(sol,[y]) for sol in sols_y])
+        append!(sols,[vcat(sol,SVector{1,Int}(y)) for sol in sols_y])
         y -= 1
         #println("|  "^depth * " ", "trying $y")
         sols_y = qsolve_iterative(A_(y),b_(y),γ_(y);depth=depth+1)
@@ -124,13 +130,14 @@ function qsolve_iterative(A::SMatrix{rank,rank,Int},b::SVector{rank, Int},γ::In
     #println("|  "^depth * " ", "trying $y")
     sols_y = qsolve_iterative(A_(y),b_(y),γ_(y);depth=depth+1)
     while sols_y ≠ nothing
-        append!(sols,[vcat(sol,[y]) for sol in sols_y])
+        append!(sols,[vcat(sol,SVector{1,Int}(y)) for sol in sols_y])
         y += 1
         #println("|  "^depth * " ", "trying $y")
         sols_y = qsolve_iterative(A_(y),b_(y),γ_(y);depth=depth+1)
     end
     #println("|  "^depth * " ", "got $sols")
-    return [s for s in Set(sols)]
+    #@assert length(Set(sols)) == length(sols)
+    return sols 
 end
 
 
@@ -199,8 +206,13 @@ function bounding_box_diago(A::Array{BigInt,1},b::Array{BigInt,1},γ::BigInt)
 
 end
 
-function qsolve(A::Array{Int,2},b::Array{Int,1},γ::Int)
-    return qsolve_iterative(A,b,γ)
+function qsolve(A::SMatrix{rank,rank,Int},b::SVector{rank,Int},γ::Int) where {rank}
+    res = qsolve_iterative(A,b,γ)
+    if res === nothing
+        return []
+    else 
+        return res
+    end
 end
 
 function qsolve_naive(A::Array{Int,2},b::Array{Int,1},γ::Int)
