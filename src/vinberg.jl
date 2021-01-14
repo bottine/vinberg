@@ -644,11 +644,12 @@ function write_all_lattices()
     end
 end
 
-function Vinberg_Algorithm_JSON_output(folder,path;v0vec=nothing)
+function Vinberg_Algorithm_stats(folder,path;v0vec=nothing)
     G = txtmat_path_to_matrix(joinpath(folder,path))
     roots,time = @timed Vinberg_Algorithm(VinbergLattice(G,v0vec=v0vec))
     v0vec = VinbergLattice(G,v0vec=v0vec).v0.vec
-    return JSON.json(Dict("path"=>path,"matrix"=>G,"v0"=>v0vec,"roots"=>roots,"time"=>time))
+    #return JSON.json(Dict("path"=>path,"matrix"=>G,"v0"=>v0vec,"roots"=>roots,"time"=>time))
+    return Dict("path"=>path,"matrix"=>G,"v0"=>v0vec,"roots"=>roots,"time"=>time)
 end
 
 
@@ -662,7 +663,7 @@ function all_json_output()
 end
 
 
-function test_suite()
+function test_suite(label=nothing)
 
     seen = []
 
@@ -671,6 +672,7 @@ function test_suite()
         # https://gist.github.com/silgon/0ba43e00e0749cdf4f8d244e67cd9d6a
         all_entries = read(io,String)  # file information to string
         known_values = JSON.parse(all_entries)
+        new_values = []
 
         for entry in known_values
             path = String(entry["path"])
@@ -678,40 +680,51 @@ function test_suite()
             v0vec = Array{Int,1}(entry["v0"])
             roots = Array{Array{Int,1},1}(entry["roots"])
             time = Float64(entry["time"])
-            
+            time_history = "time_history" ∈ keys(entry) ? Dict{String,Float64}(entry["time_history"]) : Dict{String,Float64}()
             push!(seen,path)
         
             G = txtmat_path_to_matrix("lattices/"*path)
             @assert G == matrix
             println("Looking at $path:")
-            my_roots,my_time = @timed Vinberg_Algorithm(VinbergLattice(G,v0vec=v0vec))
             
+            my_roots,my_time = @timed Vinberg_Algorithm(VinbergLattice(G,v0vec=v0vec))
+            v0vec = VinbergLattice(G,v0vec=v0vec).v0.vec
+            
+             
+            if label≠nothing
+                push!(time_history,label=>my_time)
+            end
+
             if my_roots ≠ roots
                 println("ERROR on roots")
                 @assert false
             end
+
             println("Time change ratio (in %):                                   ", round(100*my_time/time,digits=1))
             if my_time > time
                 println("Taking too long! ($my_time vs $time)")
+            elseif label≠nothing
+                entry["time"] = my_time
             end
+            entry["time_history"] = time_history
+            push!(new_values,entry)
             
-
+            
 
         end
         
         println("looked at $seen")
-        new = ""
+        
         for (root, dirs, files) in walkdir("lattices/")
             for path in files
                 if  endswith(path,".lat") && path ∉ seen
                     println("One more: $path")
-                    new *= Vinberg_Algorithm_JSON_output("lattices/",path) * ",\n"
+                    push!(new_values, Vinberg_Algorithm_stats("lattices/",path))
                 end
             end
         end
-
-        println("new matrices: (to add to known_values.json!)")
-        println(new)
+        
+        println(JSON.json(new_values))
 
     end
 end
