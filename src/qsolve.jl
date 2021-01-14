@@ -8,7 +8,7 @@ using Polyhedra
 
 include("util.jl")
 
-function qform_minimum(A::Array{Int,2},b::Array{Int,1},γ::Int)
+function qform_minimum(A::SMatrix{rank,rank,Int},b::SVector{rank,Int},γ::Int) where {rank}
 
     #@info "> qform_minimum(…)"
     minushalf_b = -b//2
@@ -62,7 +62,7 @@ end
 
 
 # seems like their (B&P) version is way better than diagonalization + my naive check
-function qsolve_iterative(A::Array{Int,2},b::Array{Int,1},γ::Int;depth=1)
+function qsolve_iterative(A::SMatrix{rank,rank,Int},b::SVector{rank, Int},γ::Int;depth=1) where {rank}
     
     #println("|  "^depth * " ", "qsolve_iterative($A,$b,$γ)")
 
@@ -105,9 +105,9 @@ function qsolve_iterative(A::Array{Int,2},b::Array{Int,1},γ::Int;depth=1)
     x_ceil = Int(round(x,digits=0)) + 1
 
 
-    A_(y) = A[1:end-1,1:end-1]
-    b_(y) = b[1:end-1] + y*A[end,1:end-1] + y*A[1:end-1,end]
-    γ_(y) = A[end,end]*y^2 +b[end]*y + γ
+    A_(y)::SMatrix{rank-1,rank-1,Int} = A[1:end-1,1:end-1]
+    b_(y)::SVector{rank-1,Int} = b[1:end-1] + y*A[end,1:end-1] + y*A[1:end-1,end]
+    γ_(y)::Int = A[end,end]*y^2 +b[end]*y + γ
 
 
     y = x_floor
