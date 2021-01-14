@@ -4,25 +4,36 @@ using Convex, SCS, GLPK, COSMO, Cbc, Clp
 using LinearAlgebra
 using Base
 using MathOptInterface
+using BitIntegers
+using StaticArrays
+# To do diagonalization on StaticArrays, we need fixed-size element types, so BigInt is out.
+# But we still need to have big integers.
+# Hopefully Int512 is enough
 
 
 
 
+function diagonalize(A::Array{Int,2}) 
+    return diagonalize(SMatrix{size(A)[1],size(A)[2],Int}(A))
+end
 
-
-
-function diagonalize(A)
+function diagonalize(A::SMatrix{rank,rank,Int}) where {rank}
     # returns T and D with D = T'GT
     # algorithm copied from there https://math.stackexchange.com/questions/1388421/reference-for-linear-algebra-books-that-teach-reverse-hermite-method-for-symmetr
     # plus a gcd step to reduce the growth of values
     # plus the "Case 0" step to further reduce, but it's not enough
     @assert issymmetric(A) "A must be symmetric."
 
-    A = BigInt.(A)
+
+    # NO BigInt is it dangerous?
+    A = Int512.(A)
+    #A = Int128.(A)
+    #A = BigInt.(A)
 
     n = size(A)[1]
     i0 = 1
-    M = [A I]
+    I_ = SMatrix{rank,rank,Int128}(I)
+    M::MMatrix{rank,2*rank} = [A I_]
     while i0 ≤ n
        
       
@@ -62,9 +73,9 @@ function diagonalize(A)
     end
    
 
-    D = M[1:n,1:n]
-    Q = M[1:n,n+1:2*n]
-    P = Q'
+    D::SMatrix{rank,rank,Int} = M[1:n,1:n]
+    Q::SMatrix{rank,rank,Int} = M[1:n,n+1:2*n]
+    P::SMatrix{rank,rank,Int} = Q'
    
 
 

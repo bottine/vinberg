@@ -5,7 +5,7 @@ using LinearAlgebra
 using Polyhedra
 using CDDLib
 using JSON
-
+using StaticArrays
 
 import Base: vec, convert
 
@@ -27,12 +27,11 @@ include("qsolve.jl")
 include("diagrams.jl")
 include("Some_Lattices.jl")
 
-struct QuadLattice
-    n_pos::Int
-    n_neg::Int
-    G::LinearAlgebra.Symmetric{Int,AbstractMatrix{Int}}
-    P::AbstractMatrix{Int}
-    D::Array{Int,1}
+struct QuadLattice{rank}
+    r::Int
+    G::SMatrix{rank,rank,Int}
+    P::SMatrix{rank,rank,Int}
+    D::SVector{rank,Int}
     last_invariant_factor::Int
     root_lengths::Vector{Int}
 end
@@ -47,25 +46,24 @@ end
 function QuadLattice(G)
 
     assert_sig_n_1_matrix(G)
+    
+    rank = size(G)[1]
 
-    G = Symmetric(G) 
+    sG = SMatrix{rank,rank,Int}(G)
 
-    np = size(G)[1]
-    n_pos = np-1
-    n_neg = 1
-    D,P = diagonalize(G)
+    D,P = diagonalize(sG)
     @assert P'*G*P == D
     @assert isdiag(D)
     D = diag(D) # Get the diagonal vector of `D`
 
-    rG = Rational{Int}.(G)
+    rG = Rational{Int}.(sG)
     cofactorsG = det(rG) * inv(rG) # https://stackoverflow.com/questions/58149645/julia-how-can-we-compute-the-adjoint-or-classical-adjoint-linear-algebra
     last_invariant_factor = abs(Int(det(rG)//gcd(cofactorsG)))
 
     twice_LIF = 2*last_invariant_factor
     root_lengths =  [k for k in 1:twice_LIF if twice_LIF%k == 0]
     
-    return QuadLattice(n_pos,n_neg,G,P,D,last_invariant_factor,root_lengths)
+    return QuadLattice(rank,sG,P,D,last_invariant_factor,root_lengths)
 end
 
 
@@ -76,12 +74,12 @@ end
 
 
 function rank(L::QuadLattice)
-    return L.n_pos + L.n_neg
+    return L.r
 end
 
-struct QuadLatticeElement
-    L::QuadLattice
-    vec::Array{Int,1}
+struct QuadLatticeElement{rank}
+    L::QuadLattice{rank}
+    vec::SVector{rank,Int}
     #vec::Array{Int,1}
 end
 function Base.isequal(v1::QuadLatticeElement,v2::QuadLatticeElement)
@@ -91,24 +89,24 @@ end
 function Base.:(==)(v1::QuadLatticeElement,v2::QuadLatticeElement)
     v1.L == v2.L && v1.vec == v2.vec
 end
-struct VinbergLattice
+struct VinbergLattice{rank}
     # By which we mean, a quadratic lattice along with
     # * An element of negative norm v₀
     # * A basis V1_basis of the sublattice v₀^\perp = V₁
     # * A set of representatives W_reps for the quotient of L by V₁⊕ℤv₀
 
-    L::QuadLattice
-    v0::QuadLatticeElement
-    V1_basis # ::Collection{QuadLatticeElement}
-    W_reps # ::{QuadLatticeElement}
-    v0vec_times_G::Adjoint{Int,Array{Int,1}} # used to hopefully make computations of the form v₀⊙something faster
+    L::QuadLattice{rank}
+    v0::QuadLatticeElement{rank}
+    V1_basis::Vector{QuadLatticeElement{rank}} # ideally a svector of quadlatticeelements since we know it has rank-1 elements
+    W_reps::Vector{QuadLatticeElement{rank}}
+    v0vec_times_G::SVector{rank,Int} # used to hopefully make computations of the form v₀⊙something faster
     v0norm::Int # the norm of v₀ computed once and for all
 end
 
 function times_v0(VL::VinbergLattice,e::QuadLatticeElement)
     #@assert e.L == VL.L
 
-    return VL.v0vec_times_G * e.vec
+    return VL.v0vec_times_G ⋅ e.vec
 end
 
 function Base.:(==)(L1::VinbergLattice,L2::VinbergLattice)
@@ -120,26 +118,25 @@ function VinbergLattice(G::Array{Int,2};v0vec::Union{Array{Int,1},Nothing}=nothi
    
     assert_sig_n_1_matrix(G)
     
+    rank = size(G)[1]
 
     L = QuadLattice(G)
-    v0 = (v0vec == nothing ? negative_vector(L) : QuadLatticeElement(L,v0vec))
+    v0 = (v0vec == nothing ? negative_vector(L) : QuadLatticeElement(L,SVector{rank,Int}(v0vec)))
     
     @assert norm(v0) < 0
 
     V1_basis = basis_of_orhogonal_complement(L,v0)
 
 
-    M = Matrix(reshape(v0.vec,(rank(L),1)))
-    for v in V1_basis
-        M = hcat(M,Matrix(reshape(v.vec,(rank(L),1))))
-    end
+    M = hcat(v0.vec,[v.vec for v in V1_basis]...)
+    sM = SMatrix{rank,rank}(M)
     W = get_integer_points(M)
-    W_reps = (x -> QuadLatticeElement(L,x)).(W)
+    W_reps = (x -> QuadLatticeElement(L,SVector{rank,Int}(x))).(W)
    
     @assert length(W_reps) == abs(det(M)) "only $(length(W_reps)) but need $(det(M))"
     @assert norm(v0) % length(W_reps) == 0
    
-    v0vec_times_G = v0.vec' *  G
+    v0vec_times_G = SVector{rank,Int}(v0.vec' *  G)
     v0norm = v0⊙v0
 
 
@@ -170,7 +167,7 @@ function standard_basis(L::QuadLattice)
     I = LinearAlgebra.Diagonal(ones((rank(L))))
     basis = []
     for i in 1:rank(L)
-        push!(basis,QuadLatticeElement(L,I[:,i])) 
+        push!(basis,QuadLatticeElement(L,SVector{rank(L),Int}(I[:,i]))) 
     end
     return basis
 end
@@ -219,7 +216,7 @@ function is_root(v::QuadLatticeElement)
 end
 
 function zero_elem(L::QuadLattice)
-    QuadLatticeElement(L,zeros(rank(L)))
+    QuadLatticeElement(L,SVector{rank(L),Int}(zeros(rank(L))))
 end
 
 function zero_elem(VL::VinbergLattice)
@@ -256,7 +253,7 @@ function basis_of_orhogonal_complement(L::QuadLattice, v0::QuadLatticeElement)
     @assert right_ker_rank == rank(L) - 1 "We need a basis!"
 
 
-    span = [QuadLatticeElement(L,u) for u in eachcol(Matrix(right_ker))]
+    span = [QuadLatticeElement(L,SVector{rank(L),Int}(u)) for u in eachcol(Matrix(right_ker))]
     return span
 
 end
@@ -301,7 +298,7 @@ function assert_sig_n_1_matrix(G)
     
     @assert length(size(G)) == 2            "G must be a matrix"
     @assert size(G)[1] == size(G)[2]        "G must be square"
-    @assert LinearAlgebra.issymmetric(G)    "G must be symmetric"
+    @assert issymmetric(G)    "G must be symmetric"
     np = size(G)[1]
     @assert (np-1,1) == signature(G)        "G must have signature (n,1)" 
 end
@@ -340,6 +337,8 @@ function roots_in_V1(VL::VinbergLattice)
 
 end
 
+
+
 function is_necessary_hyperplane(rr::Vector{QuadLatticeElement},r::QuadLatticeElement)
     
     L = r.L
@@ -347,7 +346,7 @@ function is_necessary_hyperplane(rr::Vector{QuadLatticeElement},r::QuadLatticeEl
     #@assert is_root(r)
     #@assert all(is_root(ro) for ro in rr)
 
-    return is_necessary_hyperplane([ro.vec for ro in rr],Array{Int,2}(r.L.G),r.vec)
+    return is_necessary_hyperplane([Vector{Int}(ro.vec) for ro in rr],Array{Int,2}(r.L.G),Vector{Int}(r.vec))
 
 end
 
@@ -684,7 +683,7 @@ function test_suite()
                 println("ERROR on roots")
                 @assert false
             end
-            println("Time change:", round(100*my_time/time,digits=1))
+            println("Time change ratio (in %):                                   ", round(100*my_time/time,digits=1))
             if my_time > time
                 println("Taking too long! ($my_time vs $time)")
             end
@@ -704,7 +703,7 @@ function test_suite()
             end
         end
 
-        println("new matrices:")
+        println("new matrices: (to add to known_values.json!)")
         println(new)
 
     end
