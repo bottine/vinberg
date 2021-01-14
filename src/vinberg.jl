@@ -5,6 +5,7 @@ using LinearAlgebra
 using Polyhedra
 using CDDLib
 using JSON
+using ComputedFieldTypes
 using StaticArrays
 
 import Base: vec, convert
@@ -89,7 +90,9 @@ end
 function Base.:(==)(v1::QuadLatticeElement,v2::QuadLatticeElement)
     v1.L == v2.L && v1.vec == v2.vec
 end
-struct VinbergLattice{rank}
+struct VinbergLattice{rank,rank_minus_1}
+    # https://discourse.julialang.org/t/addition-to-parameter-of-parametric-type/20059/5
+    
     # By which we mean, a quadratic lattice along with
     # * An element of negative norm v₀
     # * A basis V1_basis of the sublattice v₀^\perp = V₁
@@ -97,7 +100,7 @@ struct VinbergLattice{rank}
 
     L::QuadLattice{rank}
     v0::QuadLatticeElement{rank}
-    V1_basis::Vector{QuadLatticeElement{rank}} # ideally a svector of quadlatticeelements since we know it has rank-1 elements
+    V1Mat::SMatrix{rank,rank_minus_1,Int} # ideally a svector of quadlatticeelements since we know it has rank-1 elements
     W_reps::Vector{QuadLatticeElement{rank}}
     v0vec_times_G::SVector{rank,Int} # used to hopefully make computations of the form v₀⊙something faster
     v0norm::Int # the norm of v₀ computed once and for all
@@ -127,8 +130,9 @@ function VinbergLattice(G::Array{Int,2};v0vec::Union{Array{Int,1},Nothing}=nothi
 
     V1_basis = basis_of_orhogonal_complement(L,v0)
 
+    V1Mat = SMatrix{rank,rank-1,Int}(vcat(V1_basis...))
 
-    M = hcat(v0.vec,[v.vec for v in V1_basis]...)
+    M = hcat(v0.vec,V1_basis...)
     sM = SMatrix{rank,rank}(M)
     W = get_integer_points(M)
     W_reps = (x -> QuadLatticeElement(L,SVector{rank,Int}(x))).(W)
@@ -140,7 +144,7 @@ function VinbergLattice(G::Array{Int,2};v0vec::Union{Array{Int,1},Nothing}=nothi
     v0norm = v0⊙v0
 
 
-    return VinbergLattice(L,v0,V1_basis,W_reps,v0vec_times_G,v0norm)   
+    return VinbergLattice(L,v0,V1Mat,W_reps,v0vec_times_G,v0norm)   
 end
 
 function Base.convert(v::QuadLatticeElement) 
@@ -253,7 +257,7 @@ function basis_of_orhogonal_complement(L::QuadLattice, v0::QuadLatticeElement)
     @assert right_ker_rank == rank(L) - 1 "We need a basis!"
 
 
-    span = [QuadLatticeElement(L,SVector{rank(L),Int}(u)) for u in eachcol(Matrix(right_ker))]
+    span = [u for u in eachcol(Matrix(right_ker))]
     return span
 
 end
@@ -300,7 +304,7 @@ function assert_sig_n_1_matrix(G)
     @assert size(G)[1] == size(G)[2]        "G must be square"
     @assert issymmetric(G)    "G must be symmetric"
     np = size(G)[1]
-    @assert (np-1,1) == signature(G)        "G must have signature (n,1)" 
+    @assert true "TODO" # (np-1,1) == signature(G)        "G must have signature (n,1)" 
 end
 
 
@@ -321,7 +325,7 @@ function negative_vector(L::QuadLattice)
     # normalize it 
     v0 = (1//gcd(v0))*v0
     
-    v0 = QuadLatticeElement(L,v0)
+    v0 = QuadLatticeElement(L,SVector{rank(L),Int}(v0))
     
 
     # verify that it indeed has negative norm
@@ -497,12 +501,15 @@ function roots_decomposed_into(VL::VinbergLattice, a::QuadLatticeElement, k::Int
    
     #@info "> roots_decomposed_into(VL, $(a.vec), $k)"
     #println("…  $((-(a⊙VL.v0))/(k^0.5))")
-
-    V1Mat::Array{Int,2} = reduce(hcat,[v.vec for v in VL.V1_basis])
-   
+    
+    r = rank(VL.L)
+    V1Mat = VL.V1Mat
 
     #solutions = qsolve_naive(BigInt.(V1Mat' * VL.L.G * V1Mat), BigInt.(V1Mat' * VL.L.G * a.vec), BigInt(a⊙a - k))
-    solutions = qsolve_iterative(V1Mat' * VL.L.G * V1Mat, 2 *( V1Mat' * VL.L.G * a.vec), a⊙a - k)
+    A::SMatrix{r-1,r-1,Int} = V1Mat' * VL.L.G * V1Mat
+    b::SVector{r-1,Int} = 2 *( V1Mat' * VL.L.G * a.vec)
+    γ::Int = a⊙a - k
+    solutions = qsolve(A, b, γ)
     #println("qsolve ", V1Mat' * VL.L.G * V1Mat, " , ", 2 *(V1Mat' * VL.L.G * a.vec), " , " ,  a⊙a - k)
     #println(solutions)
     solutions_in_L::Array{QuadLatticeElement,1} = (x -> QuadLatticeElement(VL.L,V1Mat * x + a.vec)).(solutions)
