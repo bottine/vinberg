@@ -578,8 +578,9 @@ function Vinberg_Algorithm(VL::VinbergLattice;rounds=nothing)
         start = false
         
 
-
+        
         new_root = next!(new_roots_iterator)
+        # TODO optimize to start directly at roots at distance > 0 rather than skip them
         while new_root⊙v0 == 0 # skip roots at distance zero since they have been covered in FundPoly
             new_root = next!(new_roots_iterator)
         end
@@ -591,15 +592,18 @@ function Vinberg_Algorithm(VL::VinbergLattice;rounds=nothing)
             
             rounds = decrease(rounds)
                 
-            println("rounds $rounds")
 
             new_root = next!(new_roots_iterator)
             #println("($(length(roots)))trying $(new_root.vec)            [$(distance_to_hyperplane(v0,new_root))]")
         end
 
         #println("new root : $(new_root.vec)")
-        push!(roots,new_root)
-        push!(partial_times,new_root.vec' * G)
+        if true # is_necessary_hyperplane(roots,new_root)
+            # seems like this is always satisfied?
+            #
+            push!(roots,new_root)
+            push!(partial_times,new_root.vec' * G)
+        end
         #println("now have : $([r.vec for r in roots])")
 
     end

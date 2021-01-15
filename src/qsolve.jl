@@ -5,10 +5,11 @@ using LinearAlgebra
 using AbstractAlgebra
 using Base
 using Polyhedra
+using Memoize
 
 include("util.jl")
 
-@inline function qform_minimum(A::SMatrix{rank,rank,Int},b::SVector{rank,Int},γ::Int) where {rank}
+function qform_minimum(A::SMatrix{rank,rank,Int},b::SVector{rank,Int},γ::Int) where {rank}
 
     #@info "> qform_minimum(…)"
     minushalf_b = -b//2
@@ -94,7 +95,7 @@ function qsolve_iterative(A::SMatrix{1,1,Int},b::SVector{1, Int},γ::Int;depth=1
 end
 
 # seems like their (B&P) version is way better than diagonalization + my naive check
-function qsolve_iterative(A::SMatrix{rank,rank,Int},b::SVector{rank, Int},γ::Int;depth=1) where {rank}
+@memoize Dict function qsolve_iterative(A::SMatrix{rank,rank,Int},b::SVector{rank, Int},γ::Int;depth=1) where {rank}
         
 
     #println("|  "^depth * " ", "qsolve_iterative($A,$b,$γ)")
