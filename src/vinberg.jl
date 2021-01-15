@@ -357,8 +357,11 @@ end
 function drop_redundant_roots(roots::Vector{QuadLatticeElement})
 
     for i in 1:length(roots)
-        r = roots[i]
-        rr = vcat(roots[1:i-1], roots[i+1:end])
+       
+        rr = copy(roots)
+        r = popat!(rr,i)
+        #r = roots[i]
+        #rr = vcat(roots[1:i-1], roots[i+1:end])
         
 
         if ! is_necessary_hyperplane(rr,r)
@@ -552,14 +555,13 @@ end
 function Vinberg_Algorithm(VL::VinbergLattice;rounds=nothing)
 
    
-    @inline decrease!(r) = (r === nothing ? r=nothing : r=r-1)
+    @inline decrease(r) = (r === nothing ? nothing : r-1)
     geqzero(r) = (r=== nothing ? true : r ≥ 0)
 
     v0 = VL.v0
     G = VL.L.G
     
-
-
+    
     roots::Array{QuadLatticeElement,(1)} = []
     partial_times = []
     #append!(roots, roots_of_fundamental_cone(VL))
@@ -586,8 +588,10 @@ function Vinberg_Algorithm(VL::VinbergLattice;rounds=nothing)
         
         #while !(all((new_root⊙r) ≤ 0 for r in roots) && times_v0(VL,new_root) < 0) && num_remaining_rounds > 0
         while !(all(pt * new_root.vec ≤ 0 for pt in partial_times) && times_v0(VL,new_root) < 0) && geqzero(rounds) 
-            decrease!(rounds)
-
+            
+            rounds = decrease(rounds)
+                
+            println("rounds $rounds")
 
             new_root = next!(new_roots_iterator)
             #println("($(length(roots)))trying $(new_root.vec)            [$(distance_to_hyperplane(v0,new_root))]")

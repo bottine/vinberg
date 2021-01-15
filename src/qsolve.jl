@@ -8,7 +8,7 @@ using Polyhedra
 
 include("util.jl")
 
-function qform_minimum(A::SMatrix{rank,rank,Int},b::SVector{rank,Int},γ::Int) where {rank}
+@inline function qform_minimum(A::SMatrix{rank,rank,Int},b::SVector{rank,Int},γ::Int) where {rank}
 
     #@info "> qform_minimum(…)"
     minushalf_b = -b//2
@@ -29,12 +29,12 @@ function qform_minimum(A::SMatrix{rank,rank,Int},b::SVector{rank,Int},γ::Int) w
 end
 
 
-function solve_quadratic_poly(a::Int,b::Int,c::Int;depth::Int=0)
+@inline function solve_quadratic_poly(a::Int,b::Int,c::Int;depth::Int=0)
     
-    ##println("|  "^depth * " ", "lookking for sols of $a x² + $b x + $c == 0")
+    println("|  "^depth * " ", "lookking for sols of $a x² + $b x + $c == 0")
 
     Δ = b^2 - 4*a*c
-    ##println("|  "^depth * " ", "Δ is $Δ")
+    println("|  "^depth * " ", "Δ is $Δ")
     if Δ ≥ 0
         δ = sqrt(Δ)
         ##println("|  "^depth * " ", "returning ", [(-b-δ)/(2*a),(-b+δ)/(2*a)])
@@ -44,12 +44,35 @@ function solve_quadratic_poly(a::Int,b::Int,c::Int;depth::Int=0)
     end
 end
 
+@inline function int_solve_quadratic_poly(a::Int,b::Int,c::Int;depth::Int=0)
+    
+    #println("|  "^depth * " ", "lookking for sols of $a x² + $b x + $c == 0")
+
+    Δ = b^2 - 4*a*c
+    res = []
+    #println("|  "^depth * " ", "Δ is $Δ")
+    if Δ ≥ 0
+        δ = Int(round(sqrt(Δ),digits=0)) # actually faster than isqrt( ) it seems
+        if δ^2 == Δ
+            if (-b-δ) % (2*a) == 0
+                push!(res,(-b-δ)//(2*a))
+            end
+            if δ≠0 && (-b+δ) % (2*a) == 0
+                push!(res,(-b+δ)//(2*a))
+            end
+        end
+    else
+        return nothing
+    end
+    return res
+end
+
 function solve_quadratic_poly(a::BigInt,b::BigFloat,c::BigFloat;depth::Int=0)
     
     #println("|  "^depth * " ", "lookking for sols of $a x² + $b x + $c == 0")
 
     Δ = b^2 - 4*a*c
-    #println("|  "^depth * " ", "Δ is $Δ")
+    println("|  "^depth * " ", "Δ is $Δ")
     if Δ ≥ 0
         δ = sqrt(Δ)
         #println("|  "^depth * " ", "returning ", [(-b-δ)/(2*a),(-b+δ)/(2*a)])
@@ -66,24 +89,7 @@ function qsolve_iterative(A::SMatrix{1,1,Int},b::SVector{1, Int},γ::Int;depth=1
     
     a = A[1,1]
     b = b[1]
-    sols = solve_quadratic_poly(a,b,γ;depth=depth+1)
-    if sols == []
-        return nothing
-    else
-        x₁,x₂ = Int(round(sols[1],digits=0)),Int(round(sols[2],digits=0))
-        ##println("|  "^depth * " ", "$x₁ and $x₂")
-        integer_sols = []
-        if a*x₁^2 + b*x₁ + γ == 0
-            push!(integer_sols,x₁)
-        end
-        if a*x₂^2 + b*x₂ + γ == 0
-            if x₂ ∉ integer_sols
-                push!(integer_sols,x₂)
-            end
-        end
-        ##println("|  "^depth * " ", "$a x² + $b x + $γ = 0 ", integer_sols)
-        return integer_sols
-    end
+    return int_solve_quadratic_poly(a,b,γ;depth=depth+1)
    
 end
 
