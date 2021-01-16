@@ -1,11 +1,12 @@
 ## Copied from qsolve.py
 
-using Convex, SCS, GLPK, COSMO, Cbc, Clp
+using Convex, Cbc
 using LinearAlgebra
 using Base
 using MathOptInterface
 using BitIntegers
 using StaticArrays
+using Memoize
 # To do diagonalization on StaticArrays, we need fixed-size element types, so BigInt is out.
 # But we still need to have big integers.
 # Hopefully Int512 is enough
@@ -173,8 +174,8 @@ function test_get_integer_points()
 
 end
 
-
-function is_necessary_hyperplane(cone_roots::Vector{SVector{rank,Int}},A::SMatrix{rank,rank,Int},root::SVector{rank,Int}) where {rank}
+# better to memoize _after_multiplication with A
+@memoize Dict function is_necessary_hyperplane(cone_roots::Vector{SVector{rank,Int}},A::SMatrix{rank,rank,Int},root::SVector{rank,Int}) where {rank}
 #function is_necessary_hyperplane(cone_roots,A,root)
     # The elements of cone_roots are roots of the lattice, and the cone they represent 
     # is the elements x in real space satisfying x'*A*r ≤ 0 for all r in cone_roots.

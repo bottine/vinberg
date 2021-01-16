@@ -1,8 +1,3 @@
-using MLStyle
-using LightGraphs
-using GraphPlot
-using Colors
-using Multisets
 using Memoize
 using StaticArrays
 using Debugger

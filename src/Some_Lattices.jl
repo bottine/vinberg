@@ -42,6 +42,11 @@ Vin07_L19 = -8*I_ ⊕ A_(3)
 
 BP18_12 = U ⊕ 36*I_ ⊕ 6*I_
 
+# this one doesn't seem to be reflective, but it may well be
+G2 = [-7 0   0 0; 
+      0 2 -1 0; 
+      0 -1 2 -1; 
+      0 0 -1 2]
 
 
 L = Dict()

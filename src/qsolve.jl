@@ -4,7 +4,6 @@
 using LinearAlgebra
 using AbstractAlgebra
 using Base
-using Polyhedra
 using Memoize
 
 include("util.jl")
