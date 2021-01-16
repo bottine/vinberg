@@ -281,20 +281,11 @@ end
 
 function signature(G)
     
-    D,T = LinearAlgebra.eigen(G)
+    D,P = diagonalize(G)
+    pos = filter(>(0),diag(D))
+    neg = filter(<(0),diag(D))
     
-
-    pos = 0
-    neg = 0
-    for d in D
-        if d < 0
-           neg = neg + 1
-        elseif d > 0
-           pos = pos + 1
-        end
-    end
-    return (pos,neg)
-
+    return (length(pos),length(neg))
 end
 
 
@@ -302,9 +293,9 @@ function assert_sig_n_1_matrix(G)
     
     @assert length(size(G)) == 2            "G must be a matrix"
     @assert size(G)[1] == size(G)[2]        "G must be square"
-    @assert issymmetric(G)    "G must be symmetric"
+    @assert issymmetric(G)                  "G must be symmetric"
     np = size(G)[1]
-    @assert true "TODO" # (np-1,1) == signature(G)        "G must have signature (n,1)" 
+    @assert true "TODO"  (np-1,1) == signature(G)        "G must have signature (n,1)" 
 end
 
 
@@ -447,7 +438,9 @@ function next!(r::RootsByDistance)
     VL = r.VL
 
     #dist(a0,k,w) = abs(a0*(v0⊙v0) + (w⊙v0))/sqrt(-(k*(v0⊙v0))) # TODO: ensure that the minus sign is needed
-    dist(a0,k,w) = abs(a0*VL.v0norm + (times_v0(VL,w)))/sqrt(-(k*VL.v0norm)) # TODO: ensure that the minus sign is needed
+    #dist(a0,k,w) = abs(a0*VL.v0norm + (times_v0(VL,w)))/sqrt(-(k*VL.v0norm)) # TODO: ensure that the minus sign is needed
+    # this is not the distance, but minimizing it should be the same as minimizing distance
+    dist(a0,k,w) = (a0*VL.v0norm + (times_v0(VL,w)))^2//k # TODO: ensure that the minus sign is needed
 
     while r.current_a0_and_k_and_w === nothing || isempty(r.roots_for_current_a0_and_k_and_w)
         
@@ -591,7 +584,6 @@ function Vinberg_Algorithm(VL::VinbergLattice;rounds=nothing)
         while !(all(pt * new_root.vec ≤ 0 for pt in partial_times) && times_v0(VL,new_root) < 0) && geqzero(rounds) 
             
             rounds = decrease(rounds)
-                
 
             new_root = next!(new_roots_iterator)
             #println("($(length(roots)))trying $(new_root.vec)            [$(distance_to_hyperplane(v0,new_root))]")
