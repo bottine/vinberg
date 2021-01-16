@@ -46,26 +46,19 @@ function drop_redundant_roots(roots::Vector{HyperbolicLatticeElement})
     
 end
 
-function roots_of_fundamental_cone(VL::VinbergLattice)
+function roots_of_fundamental_cone(VL::VinbergLattice,roots_at_distance_zero::Vector{HyperbolicLatticeElement})
 
 
-
-
-    possible_roots = roots_in_V1(VL) 
+    possible_roots = roots_at_distance_zero
 
     cone_roots::Vector{HyperbolicLatticeElement} = Vector()
     for r in possible_roots
-        #println("looking at $(r.vec)")
-        #println("cone_roots is $([r.vec for r in cone_roots])")
-        #@assert ((-1)*r).vec == -r.vec
-        #@assert HyperbolicLatticeElement(r.L,-r.vec) == (-1)*r
-        # @assert (r ∉ cone_roots) ⊻ all((-1)*r ≠ cr for cr in cone_roots) "yes?" TODO WTF
-        if  all((-1)*r ≠ cr for cr in cone_roots) # &&  all(r⊙cr ≤ 0 for cr in cone_roots) # TODO seems like we can't test equality for our own type HyperbolicLatticeElement
-            #println("compatible with other roots")
-            # TODO I added the condition r⊙cr≤0 but I'm not sure it's good to have it there
-            if is_necessary_hyperplane(cone_roots, r) && is_necessary_hyperplane(cone_roots, (-1)*r)
+        if  all((-1)*r ≠ cr for cr in cone_roots) # && all(r⊙cr ≤ 0 for cr in cone_roots)
+            # TODO Second (commented) condition not in B&P but it makes sense…
+            # Why is it not needed?
+            if is_necessary_hyperplane(cone_roots, r)  && is_necessary_hyperplane(cone_roots, (-1)*r)
                 push!(cone_roots,r)
-                cone_roots = drop_redundant_roots(cone_roots)
+                #cone_roots = drop_redundant_roots(cone_roots)
             end
         
         end
@@ -105,15 +98,20 @@ function Vinberg_Algorithm(VL::VinbergLattice;rounds=nothing)
     v0 = VL.v0
     G = VL.L.G
     
+    new_roots_iterator = RootsByDistance(VL)
+
+    roots_at_distance_zero = Vector{HyperbolicLatticeElement}()
+    (new_root,d) = next_with_dist!(new_roots_iterator)
+    while d == 0
+        push!(roots_at_distance_zero,new_root)
+        (new_root,d) = next_with_dist!(new_roots_iterator)
+    end
+    sort!(roots_at_distance_zero,by=(x->x.vec))
     
-    roots::Array{HyperbolicLatticeElement,(1)} = []
-    partial_times = []
-    #append!(roots, roots_of_fundamental_cone(VL))
-    append!(roots, roots_of_fundamental_cone(VL))
+    roots::Array{HyperbolicLatticeElement,(1)} = roots_of_fundamental_cone(VL,roots_at_distance_zero)
     partial_times = [r.vec' * G for r in roots]
 
 
-    new_roots_iterator = RootsByDistance(VL)
 
     start = true
 
@@ -123,11 +121,7 @@ function Vinberg_Algorithm(VL::VinbergLattice;rounds=nothing)
         
 
         
-        new_root = next!(new_roots_iterator)
-        # TODO optimize to start directly at roots at distance > 0 rather than skip them
-        while new_root⊙v0 == 0 # skip roots at distance zero since they have been covered in FundPoly
-            new_root = next!(new_roots_iterator)
-        end
+
 
         #println("($(length(roots)))trying $(new_root.vec)             [$(distance_to_hyperplane(v0,new_root))]")
         

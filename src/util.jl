@@ -174,19 +174,11 @@ function test_get_integer_points()
 
 end
 
-# better to memoize _after_multiplication with A
-@memoize Dict function is_necessary_hyperplane(cone_roots::Vector{SVector{rank,Int}},A::SMatrix{rank,rank,Int},root::SVector{rank,Int}) where {rank}
-#function is_necessary_hyperplane(cone_roots,A,root)
-    # The elements of cone_roots are roots of the lattice, and the cone they represent 
-    # is the elements x in real space satisfying x'*A*r ≤ 0 for all r in cone_roots.
-    # want to check that the cone obtained by intersecting with the half-space defined by r is strictly contained.
-    # This should be equivalent to the cone C intersecting \{x : x'*A*root > 0\} non trivially.
+@memoize Dict function is_necessary_hyperplane(cone_roots::Vector{SVector{rank,Int}},root::SVector{rank,Int}) where {rank}
 
-    n = size(A,1)
-    @assert size(A) == (n,n)
     @assert A' == A
-   
 
+    n = rank
 
     # x' * (A * r) ≤ 0 ∀ r
     # (A * r)' * x ≤ 0 ∀ r
@@ -194,9 +186,9 @@ end
     x = Variable(n, IntVar)
     p = satisfy()       # satisfiability question 
     for cone_root in cone_roots
-        p.constraints += x' * (A*cone_root) ≤ 0 # hyperplanes defining the cone
+        p.constraints += x' * cone_root ≤ 0 # hyperplanes defining the cone
     end
-    p.constraints += x' * (A*root) ≥ 1 # other side of the half space defined by root
+    p.constraints += x' * root ≥ 1 # other side of the half space defined by root
     # it should only be strictly bigger than zero, but Convex.jl does not do "strictly", so we change it to ≥ 1 (and since we have a cone, it should be the same result)
 
     
@@ -212,6 +204,13 @@ end
         println("can't tell!")
     end
 
+end
+
+
+# better to memoize _after_multiplication with A
+function is_necessary_hyperplane(cone_roots::Vector{SVector{rank,Int}},A::SMatrix{rank,rank,Int},root::SVector{rank,Int}) where {rank}
+    
+    return is_necessary_hyperplane((r -> A*r).(cone_roots),A*root)
 
 end
 

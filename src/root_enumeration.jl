@@ -1,53 +1,35 @@
-using OrderedCollections
 
 include("util.jl")
 include("qsolve.jl")
 include("hyperbolic_lattices.jl")
 
+
+
 mutable struct RootsByDistance
     VL::VinbergLattice
-    next_least_a0_for_k_and_w::Union{Nothing,Vector{Tuple{Int,HyperbolicLatticeElement,Int,Int}}}
+    next_least_a0s_for_k_and_w::Union{Nothing,Vector{Tuple{Int,HyperbolicLatticeElement,Int,Int}}}
     current_a0_and_k_and_w::Union{Nothing,Tuple{Int,Int,HyperbolicLatticeElement}}
     roots_for_current_a0_and_k_and_w::Vector{HyperbolicLatticeElement}
-    current_fake_dist::Union{Nothing,Rational{Int}} 
+    current_fake_dist::Union{Nothing,Rational{Int}}
 end
 
 
-function roots_in_V1(VL::VinbergLattice)
 
-    sort([v for k in root_lengths(VL.L) for v in roots_decomposed_into(VL,zero_elem(VL.L),k)],by=(v->v.vec))
-
-end
-
-
-function RootsByDistance(VL::VinbergLattice;no_distance_zero=false)
+function RootsByDistance(VL::VinbergLattice)
     
     v0 = VL.v0
 
     W_reps = VL.W_reps
-    println("W_reps is $W_reps")
-    # TODO Figure out how to throw away roots at distance zero from the get-go
-    #
 
-    # want to iterate over roots e = a₀v₀ + v₁ + w with w in W_reps, and v₁ in v₀^⟂ = V₁, by increasing distance of the hyperplane H_e to v₀.
-    # k is the norm of e, i.e. e⊙e
-    # We have a finite number of possible ws and a finite number of possible values for k.
-    # For each pair (w,k) the distance does not depende on the specific choice of v₁ since sinh²d(v₀,H_e) = - (e⊙v₀)² / (e⊙e * v₀⊙v₀)
-    # and minimizing the distance amounts to minimizing e⊙v₀²/(e⊙e) = e⊙v₀²/k
-    #
-    # Developping, on gets:
-    #
-    #
-    # e⊙v₀²/k = (a₀(v₀⊙v₀) + w⊙v₀)²/k
 
-    next_least_a0_for_k_and_w = Vector{Tuple{Int,HyperbolicLatticeElement,Int,Int}}()
+    next_least_a0s_for_k_and_w = Vector{Tuple{Int,HyperbolicLatticeElement,Int,Int}}()
      
     for w in W_reps, k in root_lengths(VL.L)
         least::Rational{Int} = -times_v0(VL,w)//VL.v0norm # -(w⊙v0)/(v0⊙v0)
-        @info "least($(w.vec),$k) at $least"
+        #@info "least($(w.vec),$k) at $least"
         least_plus::Int = ceil(least)
         least_minus::Int = floor(least)
-        push!(next_least_a0_for_k_and_w, (k,w,least_plus,least_minus))
+        push!(next_least_a0s_for_k_and_w, (k,w,least_plus,least_minus))
     end
 
 
@@ -57,9 +39,10 @@ function RootsByDistance(VL::VinbergLattice;no_distance_zero=false)
     
     current_fake_dist::Union{Nothing,Rational{Int}} = nothing
 
-    return RootsByDistance(VL,next_least_a0_for_k_and_w,current_a0_and_k_and_w,roots_for_current_a0_and_k_and_w,current_fake_dist)
+    return RootsByDistance(VL,next_least_a0s_for_k_and_w,current_a0_and_k_and_w,roots_for_current_a0_and_k_and_w,current_fake_dist)
 
 end
+
 
 function next_with_decomposition!(r::RootsByDistance)
     #@info "> next!(roots_by_distance)"
@@ -74,7 +57,7 @@ function next_with_decomposition!(r::RootsByDistance)
         min_val = nothing
         min_tuple = nothing
         min_idx = nothing
-        for (idx, (k,w,a0plus,a0minus)) in enumerate(r.next_least_a0_for_k_and_w)
+        for (idx, (k,w,a0plus,a0minus)) in enumerate(r.next_least_a0s_for_k_and_w)
             if min_tuple === nothing || to_minimize(a0plus,k,w) < min_val
                 min_tuple = (a0plus,k,w)
                 min_val = to_minimize(a0plus,k,w)
@@ -93,7 +76,7 @@ function next_with_decomposition!(r::RootsByDistance)
         (a0,k,w) = r.current_a0_and_k_and_w
         
         # we update the dictionary
-        (k,w,a0plus,a0minus) = r.next_least_a0_for_k_and_w[min_idx]
+        (k,w,a0plus,a0minus) = r.next_least_a0s_for_k_and_w[min_idx]
         if a0plus == a0
             a0plus += 1
         end
@@ -101,7 +84,7 @@ function next_with_decomposition!(r::RootsByDistance)
             a0minus -= 1
         end
         
-        r.next_least_a0_for_k_and_w[min_idx] = (k,w,a0plus,a0minus)
+        r.next_least_a0s_for_k_and_w[min_idx] = (k,w,a0plus,a0minus)
 
         # we update fake_dist
         r.current_fake_dist = (a0*VL.v0norm + VL.v0vec_times_G ⋅ w.vec)^2 // k
@@ -114,12 +97,17 @@ function next_with_decomposition!(r::RootsByDistance)
 
 end
 
-function next!(r::RootsByDistance)
+
+function next_with_dist!(r::RootsByDistance)
     
-    return next_with_decomposition!(r)[2] 
+    res = next_with_decomposition!(r)
+    return (res[2],res[3])
 
 end
 
+function next!(r::RootsByDistance)
+    return next_with_decomposition!(r)[2]
+end
 
 
 function roots_decomposed_into(VL::VinbergLattice, a::HyperbolicLatticeElement, k::Int)
@@ -154,9 +142,9 @@ function roots_decomposed_into(VL::VinbergLattice, a::HyperbolicLatticeElement, 
     return filter(is_root,solutions_in_L)
 end
 
-function enumerate_roots(VL;num=200,no_distance_zero=false,file=nothing)
+function enumerate_roots(VL;num=200,file=nothing)
     
-    roots_by_distance = RootsByDistance(VL;no_distance_zero=no_distance_zero)
+    roots_by_distance = RootsByDistance(VL)
     
     roots = []
     last_fake_dist = 0
