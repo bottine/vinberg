@@ -174,7 +174,7 @@ function test_get_integer_points()
 end
 
 
-function is_necessary_hyperplane(cone_roots::Array{Array{Int,1},1},A::Array{Int,2},root::Array{Int,1})
+function is_necessary_hyperplane(cone_roots::Vector{SVector{rank,Int}},A::SMatrix{rank,rank,Int},root::SVector{rank,Int}) where {rank}
 #function is_necessary_hyperplane(cone_roots,A,root)
     # The elements of cone_roots are roots of the lattice, and the cone they represent 
     # is the elements x in real space satisfying x'*A*r ≤ 0 for all r in cone_roots.

@@ -341,7 +341,7 @@ function is_necessary_hyperplane(rr::Vector{QuadLatticeElement},r::QuadLatticeEl
     #@assert is_root(r)
     #@assert all(is_root(ro) for ro in rr)
 
-    return is_necessary_hyperplane([Vector{Int}(ro.vec) for ro in rr],Array{Int,2}(r.L.G),Vector{Int}(r.vec))
+    return is_necessary_hyperplane(Vector{SVector{rank(L),Int}}([ro.vec for ro in rr]),r.L.G,r.vec)
 
 end
 
@@ -409,6 +409,18 @@ function RootsByDistance(VL::VinbergLattice;no_distance_zero=false)
 
     W_reps = VL.W_reps
     # TODO Figure out how to throw away roots at distance zero from the get-go
+    #
+
+    # want to iterate over roots e = a₀v₀ + v₁ + w with w in W_reps, and v₁ in v₀^⟂ = V₁, by increasing distance of the hyperplane H_e to v₀.
+    # k is the norm of e, i.e. e⊙e
+    # We have a finite number of possible ws and a finite number of possible values for k.
+    # For each pair (w,k) the distance does not depende on the specific choice of v₁ since sinh²d(v₀,H_e) = - (e⊙v₀)² / (e⊙e * v₀⊙v₀)
+    # and minimizing the distance amounts to minimizing e⊙v₀²/(e⊙e) = e⊙v₀²/k
+    #
+    # Developping, on gets:
+    #
+    #
+    # e⊙v₀²/k = (a₀(v₀⊙v₀) + w⊙v₀)²/k
 
     next_least_a0_for_k_and_w::Dict{Tuple{Int,QuadLatticeElement},Tuple{Int,Int}} = Dict()
         
