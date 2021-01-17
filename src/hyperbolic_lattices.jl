@@ -2,67 +2,137 @@ using AbstractAlgebra
 using LinearAlgebra
 using JSON
 using StaticArrays
+using ToggleableAsserts
 
 import Base: vec, convert
 
 include("util.jl")
 include("qsolve.jl")
 
+
+
+
+"""
+A hyperbolic lattice, defined by a symmetric matrix with integer coefficients, of signature `(n,1)`.
+
+Stored in the structure are:
+
+* `G`, the symmetric matrix defining the scalar product.
+  It has to be symmetric of signature `(n,1)`.
+
+For convenience/performance, also stored are:
+
+* The rank `r` of the lattice.
+  This is just `r == size(G)[1] == size(G)[2]`.
+* The two components `P,D` of a diagonalization of `G`, i.e. a matrix `P` and a vector `D` satisfying `P'*G*P == diagm(D)`.
+* The last invariant factor of the lattice, which can be computed as `abs(Int(det(rG)//gcd(cofactors_G)))`.
+* The possible root lengths of the lattice, i.e. a finite list of integers that a root can have as a norm (roots and length to be defined below)
+"""
 struct HyperbolicLattice{rank}
+    # Rank
     r::Int
+    
+    # Matrix defining the bilinear form: We store it as a `SMatrix` for performance reasons
     G::SMatrix{rank,rank,Int}
+    
+    # Diagonalisation pair.
     P::SMatrix{rank,rank,Int}
     D::SVector{rank,Int}
+    
+    # Last invariant factor and possible root lengths.
     last_invariant_factor::Int
     root_lengths::Vector{Int}
 end
 
-# Presumably any root must have length dividing twice the last invariant factor
-function root_lengths(L::HyperbolicLattice)
-    return L.root_lengths
+
+"""
+    Asserts that G is a symmetric matrix of signature `(n,1)`.
+"""
+function assert_sig_n_1_matrix(G)
+   
+    rank = size(G)[1]
+    @assert size(G) == (rank,rank)          "G must be a square matrix."
+    @assert issymmetric(G)                  "G must be symmetric."
+    @assert signature(G) == (rank-1,1)      "G must have signature (n,1)." 
 end
 
-
-
+"""
+    Constructor for hyperbolic lattices.
+    Only takes a matrix as its argument, and computes the other values.
+"""
 function HyperbolicLattice(G)
 
     assert_sig_n_1_matrix(G)
     
     rank = size(G)[1]
 
+    # G can be essentially in any "matrix-like" form, so we convert it to a SMatrix (the small 's' stands for "static"
     sG = SMatrix{rank,rank,Int}(G)
 
+    # Diagonalize G
     D,P = diagonalize(sG)
-    @assert P'*G*P == D
+    @assert P'*G*P == D ""
     @assert isdiag(D)
-    D = diag(D) # Get the diagonal vector of `D`
-
+    # Get the diagonal vector of `D`
+    D = diag(D) 
+    
+    # Compute the last invariant factor:
+    # * taking `rG` should force the determinant and inverse computations to be exact.
+    # * we use [this idea](https://stackoverflow.com/questions/58149645/julia-how-can-we-compute-the-adjoint-or-classical-adjoint-linear-algebra) to compute the cofactor matrix.i
+    #
+    # TODO: do we **need** the `abs(Int(…))` part?
     rG = Rational{Int}.(sG)
-    cofactorsG = det(rG) * inv(rG) # https://stackoverflow.com/questions/58149645/julia-how-can-we-compute-the-adjoint-or-classical-adjoint-linear-algebra
+    cofactorsG = det(rG) * inv(rG) # 
     last_invariant_factor = abs(Int(det(rG)//gcd(cofactorsG)))
-
+    
+    # The possible lengths of roots are the divisor of `2*last_invariant_factor`.
     twice_LIF = 2*last_invariant_factor
     root_lengths =  [k for k in 1:twice_LIF if twice_LIF%k == 0]
     
     return HyperbolicLattice(rank,sG,P,D,last_invariant_factor,root_lengths)
 end
 
-
 function Base.:(==)(L1::HyperbolicLattice,L2::HyperbolicLattice)
     L1.G == L2.G
 end
 
+function root_lengths(L::HyperbolicLattice)
+    return L.root_lengths
+end
 
-
-function rank(L::HyperbolicLattice)
+"""
+The rank of the lattice.
+"""
+function rk(L::HyperbolicLattice)
     return L.r
 end
 
+
+
+
+
+"""
+An element of a hyperbolic lattice, represented by:
+* `L::HyperbolicLattice`, the lattice it is a member of.
+* `vec`, the vector of its coordinate in the standard basis.
+    
+"""
 struct HyperbolicLatticeElement{rank}
     L::HyperbolicLattice{rank}
     vec::SVector{rank,Int}
-    #vec::Array{Int,1}
 end
+
+"""
+    Creates a hyperbolic lattice element out of a lattice `L` and a vector `vec` using the syntax `L(vec)`
+"""
+function (L::HyperbolicLattice)(vec)
+    HyperbolicLatticeElement(L,vec)
+end
+
+function Base.show(io::IO,v::HyperbolicLatticeElement) 
+    show(io,v.vec)
+end
+
 function Base.isequal(v1::HyperbolicLatticeElement,v2::HyperbolicLatticeElement)
     v1.L == v2.L && v1.vec == v2.vec
 end
@@ -70,71 +140,13 @@ end
 function Base.:(==)(v1::HyperbolicLatticeElement,v2::HyperbolicLatticeElement)
     v1.L == v2.L && v1.vec == v2.vec
 end
-struct VinbergLattice{rank,rank_minus_1}
-    # https://discourse.julialang.org/t/addition-to-parameter-of-parametric-type/20059/5
-    
-    # By which we mean, a quadratic lattice along with
-    # * An element of negative norm v₀
-    # * A basis V1_basis of the sublattice v₀^\perp = V₁
-    # * A set of representatives W_reps for the quotient of L by V₁⊕ℤv₀
 
-    L::HyperbolicLattice{rank}
-    v0::HyperbolicLatticeElement{rank}
-    V1Mat::SMatrix{rank,rank_minus_1,Int} # ideally a svector of quadlatticeelements since we know it has rank-1 elements
-    W_reps::Vector{HyperbolicLatticeElement{rank}}
-    v0vec_times_G::SVector{rank,Int} # used to hopefully make computations of the form v₀⊙something faster
-    v0norm::Int # the norm of v₀ computed once and for all
-end
-
-function times_v0(VL::VinbergLattice,e::HyperbolicLatticeElement)
-    #@assert e.L == VL.L
-
-    return VL.v0vec_times_G ⋅ e.vec
-end
-
-function Base.:(==)(L1::VinbergLattice,L2::VinbergLattice)
-    @assert false "Let's not compare vinberg lattices yet"
-end
-
-
-function VinbergLattice(G::Array{Int,2};v0vec::Union{Array{Int,1},Nothing}=nothing)
-   
-    assert_sig_n_1_matrix(G)
-    
-    rank = size(G)[1]
-
-    L = HyperbolicLattice(G)
-    v0 = (v0vec == nothing ? negative_vector(L) : HyperbolicLatticeElement(L,SVector{rank,Int}(v0vec)))
-    
-    @assert norm(v0) < 0
-
-    V1_basis = basis_of_orhogonal_complement(L,v0)
-
-    V1Mat = SMatrix{rank,rank-1,Int}(vcat(V1_basis...))
-
-    M = hcat(v0.vec,V1_basis...)
-    sM = SMatrix{rank,rank}(M)
-    W = get_integer_points(M)
-    W_reps = (x -> HyperbolicLatticeElement(L,SVector{rank,Int}(x))).(W)
-   
-    @assert length(W_reps) == abs(det(M)) "only $(length(W_reps)) but need $(det(M))"
-    @assert norm(v0) % length(W_reps) == 0
-   
-    v0vec_times_G = SVector{rank,Int}(v0.vec' *  G)
-    v0norm = v0⊙v0
-
-
-    return VinbergLattice(L,v0,V1Mat,W_reps,v0vec_times_G,v0norm)   
-end
-
-function Base.convert(v::HyperbolicLatticeElement) 
-    return v.vec::Array{Int,1} 
-end
-
-same_quad_lattice(v::HyperbolicLatticeElement,w::HyperbolicLatticeElement) = v.L == w.L
-
+"""
+    Computes the inner_product of the two elements.
+    Obtained as `v' * G * w`.
+"""
 function inner_product(v::HyperbolicLatticeElement,w::HyperbolicLatticeElement)
-    #@assert same_quad_lattice(v,w) "The elements must belong to the same lattice"
+    @toggled_assert v.L == w.L "The elements must belong to the same lattice"
     G = v.L.G
     vv = v.vec
     ww = w.vec
@@ -147,21 +159,19 @@ function norm(v::HyperbolicLatticeElement)
     return inner_product(v,v)
 end
 
+"""
+    The standard basis of the lattice, that is, given by the vectors (1,0,…,0),…,(0,…,0,1,0…,0),…,(0,…,0,1).
+"""
 function standard_basis(L::HyperbolicLattice)
-    I = LinearAlgebra.Diagonal(ones((rank(L))))
-    basis = []
-    for i in 1:rank(L)
-        push!(basis,HyperbolicLatticeElement(L,SVector{rank(L),Int}(I[:,i]))) 
-    end
-    return basis
+    return L.(SVector{rk(L),Int}.(collect(eachcol(I(rk(L))))))
 end
 
-function Base.:-(v::HyperbolicLatticeElement)         ## the `Base.:` syntax is necessary to make julia undenstand that we want to extend the function `-` to our type
+function Base.:-(v::HyperbolicLatticeElement) 
     return HyperbolicLatticeElement(-v.vec,v.L)
 end 
 
 function Base.:+(v::HyperbolicLatticeElement,w::HyperbolicLatticeElement)
-    #@assert same_quad_lattice(v,w) "The elements must belong to the same lattice"
+    @toggled_assert v.L == w.L "The elements must belong to the same lattice"
     return HyperbolicLatticeElement(v.L,v.vec+w.vec)
 end 
 
@@ -169,11 +179,22 @@ function Base.:*(k::Int, v::HyperbolicLatticeElement)
     return HyperbolicLatticeElement(v.L,k*v.vec)
 end 
 
-function is_root(v::HyperbolicLatticeElement)
+"""
+Whether an element of a hyperbolic lattice is a root.
+We follow B&P in our definition of a root; `v` is a root if:
 
+* `v` has positive norm.
+* `v` is primitive, in that the gcd of its coefficients must be 1.
+* `v` satisfies the crystallographic condition, meaning that reflecting along `v` preserves the lattice.
+  This can be checked by verifying that the reflection of elements of the standard basis are still in the lattice.
+"""
+function is_root(v::HyperbolicLatticeElement)
+    
     nv = norm(v)
-    # A root has (non strictly) positive norm
-    if nv < 0
+    
+    # A root has  positive norm.
+    # TODO: check that it's indeed "positive" and not "non-negative"
+    if nv ≤ 0
         return false
     end
 
@@ -190,7 +211,10 @@ function is_root(v::HyperbolicLatticeElement)
     end
 
     # A root respects the crystallographic condition
-    #if ! all(2*(e⊙v) % (v⊙v) == 0 for e in standard_basis(v.L))
+    @toggled_assert iff(
+                        all(2*(e⊙v) % (v⊙v) == 0 for e in standard_basis(v.L)), 
+                        all(2*(col⋅v.vec) % nv == 0 for col in eachcol(v.L.G))
+                       ) "Optimized check for the crystallographic condition should be equivalent to the complete one."
     if ! all(2*(col⋅v.vec) % nv == 0 for col in eachcol(v.L.G))
         return false
     end
@@ -199,122 +223,205 @@ function is_root(v::HyperbolicLatticeElement)
 
 end
 
-function fake_dist(VL::VinbergLattice,e::HyperbolicLatticeElement)
-    # computes the value - (e⊙v₀)² / e⊙e ,
-    # which is monotonous with the distance between v₀ and H_e (the hyperplane defined by e)
 
-    @assert e.L == VL.L
-    # @assert is_root(e)
+"""
+    A `VinbergLattice` is simply a `HyperbolicLattice` `L` plus a choice of vector `v₀` of the lattice, of negative norm.
+    Given `L` and `v₀`, some more objects can be computed:
+    Let `V₁` be the subgroup of `L` consisting of elements orthogonal to v₀, i.e. `V₁ = v₀^⟂`.
+    We can compute a basis of `V₁`, using methods of the package `AbstractAlgebra`.
+    The sublattice `⟨v₀⟩⊕V₁` is of finite index in L, and we can therefore find a finite set of (coset) representatives.
+
+    We therefore store:
     
-    return -(VL.v0vec_times_G ⋅ e.vec)^2//(e⊙e)
+    * The lattice `L`,
+    * The negative norm vector `v₀`
+
+    And the related data for convenience/performance:
+
+    * `V₁_basis_matrix` is rank×rank_minus_1 matrix whose columns are a basis for `V₁`
+    * `W` a set of coset representatives for the sublattice `⟨v₀⟩⊕V₁`.
+    * `v₀_vec_times_G == v₀.vec' * G` corresponds to the computation v₀.vec ⋅ G, which makes multiplication of v₀ with other elements faster:
+      `v₀⊙e = v₀.vec' * L.G * e.vec = v₀_vec_times_G * e.vec` so that we can skip one matrix multiplication
+    * `v₀_norm == v₀⊙v₀` is the norm of v₀, which we precompute sincet it is used often.
+
+    Note that the type VinbergLattice{rank,rank_minus_1} is parametrized by the two parameters `rank,rank_minus_1`, but they must satisfy `rank-1 == rank_minus_1`.
+    This useless second parameter is due to a [limitation of julia](https://discourse.julialang.org/t/addition-to-parameter-of-parametric-type/20059/5).
+"""
+struct VinbergLattice{rank,rank_minus_1}
+    
+    # The lattice
+    L::HyperbolicLattice{rank}
+   
+    # The negative norm vector "basepoint"
+    v₀::HyperbolicLatticeElement{rank}
+
+    # A basis of V₁, in the form of a matrix
+    V₁_basis_matrix::SMatrix{rank,rank_minus_1,Int}
+
+    # The representatives for `⟨v₀⟩⊕V₁` 
+    W::Vector{HyperbolicLatticeElement{rank}}
+
+    # Precomputations
+    v₀_vec_times_G::SVector{rank,Int} # used to hopefully make computations of the form v₀⊙something faster
+    v₀_norm::Int # the norm of v₀ computed once and for all
+end
+
+"""
+The result of multiplying `e` with `v₀`, i.e. `e⊙v₀`.
+"""
+function times_v₀(VL::VinbergLattice,e::HyperbolicLatticeElement)
+    @toggled_assert e.L == VL.L
+
+    @toggled_assert VL.v₀_vec_times_G ⋅ e.vec == VL.v₀⊙e "Optimized computation should not differ from official one"
+    return VL.v₀_vec_times_G ⋅ e.vec
+end
+
+function Base.:(==)(L1::VinbergLattice,L2::VinbergLattice)
+    @assert false "Let's not compare vinberg lattices yet"
+end
+
+"""
+Construct a `VinbergLattice`, with an optional negative norm vector `v₀`.
+If none is provided, one is found by diagonalizing the form.
+"""
+function VinbergLattice(G::Array{Int,2};v₀_vec::Union{Array{Int,1},Nothing}=nothing)
+   
+    assert_sig_n_1_matrix(G)
+    
+    rk = size(G)[1]
+
+    L = HyperbolicLattice(G)
+    v₀ = (v₀_vec == nothing ? negative_vector(L) : HyperbolicLatticeElement(L,SVector{rk,Int}(v₀_vec)))
+    
+    @toggled_assert norm(v₀) < 0 "v₀ needs to have negative norm"
+    
+    # Compute a matrix whose columns form a basis of `V₁`
+    V₁_basis_matrix = SMatrix{rk,rk-1,Int}(matrix_basis_of_orthogonal_complement(v₀))
+
+    # Computes a matrix `M` whose columns are the basis of `V₁` computed before, plus `v₀`
+    M = hcat(v₀.vec,V₁_basis_matrix)
+    sM = SMatrix{rk,rk}(M)
+   
+    # Compute the representatives of `⟨v₀⟩⊕V₁`
+    W = get_integer_points(M)
+    W = (x -> HyperbolicLatticeElement(L,SVector{rk,Int}(x))).(W)
+  
+    v₀_norm = norm(v₀)
+
+    @toggled_assert length(W) == abs(det(M)) "The number of representative, i.e. the index of the sublattice must be the same as the determinant of the matrix whose columns are a basis for the sublattice."
+    @toggled_assert v₀_norm % length(W) == 0 "According to B&P, the norm of v₀ must divide the index of the sublattice"
+   
+    v₀_vec_times_G = SVector{rk,Int}(v₀.vec' *  G)
+
+    return VinbergLattice(L,v₀,V₁_basis_matrix,W,v₀_vec_times_G,v₀_norm)   
+end
+
+function Base.convert(v::HyperbolicLatticeElement) 
+    return v.vec::Array{Int,1} 
+end
+
+"""
+    fake_dist(VL,e) == -(e⊙v₀)²//e⊙e
+
+where `VL::VinbergLattice` and `e::HyperbolicLatticeElement` is assumed to be a root.
+The actual distance between the vector `v₀` and the hyperplane `e^⟂` in the hyperbolic space `ℍ^n` is monotonous with this "fake distance".
+We rather use the "fake distance" since it does not involve approximate computations.
+"""
+function fake_dist(VL::VinbergLattice,e::HyperbolicLatticeElement)
+
+    @toggled_assert is_root(e)
+    @toggled_assert e.L == VL.L
+    @toggled_assert -(VL.v₀_vec_times_G ⋅ e.vec)^2//(e⊙e) == -(e⊙v₀)^2//e⊙e
+    @toggled_assert -times_v₀(VL,e.vec)^2//(e⊙e) == -(e⊙v₀)^2//e⊙e
+    
+    return -times_v₀(VL,e.vec)^2//(e⊙e)
 
 end
 
-
 function zero_elem(L::HyperbolicLattice)
-    HyperbolicLatticeElement(L,SVector{rank(L),Int}(zeros(rank(L))))
+    HyperbolicLatticeElement(L,SVector{rk(L),Int}(zeros(rk(L))))
 end
 
 function zero_elem(VL::VinbergLattice)
     zero_elem(VL.L) 
 end
 
+"""
+    Computes the reflection of `v` along `r`.
+"""
 function reflection(r::HyperbolicLatticeElement,v::HyperbolicLatticeElement)
    
-    #@assert same_quad_lattice(v,r) "The elements must belong to the same lattice"
-    #@assert is_root(r) "r needs to be a root"
+    @toggled_assert v.L == r.L
+    @toggled_assert is_root(r)
 
     return v - (2*(r⊙v)/(r⊙r))*r
 
 end
 
+"""
+Computes a basis (over ℤ) for the orthogonal complement `v^⟂` of `v`.
+An element `e` lies in `v^⟂` iff `e.vec'*G*v.vec == e⊙v == 0`, which is iff `e.vec` is in the kernel of `G*v.vec`
 
-function vec(v::HyperbolicLatticeElement)
-    return v.vec
+"""
+function matrix_basis_of_orthogonal_complement(v::HyperbolicLatticeElement)
+   
+    rank = rk(v.L)
+
+    # We make use of `AbstractAlgebra`, so first need to convert to its types.
+    # We create a space of mutrices over ℤ and of dimensions `1×rk(L)`
+    S = MatrixSpace(ZZ, 1, rank)
+
+    # Politely ask AbstractAlgebra for a basis
+    Mv = v.L.G * v.vec
+    MMv = S(reduce(vcat,Mv))
+    @toggled_assert MMv == S(Mv')
+    right_ker_rank, right_ker = right_kernel(MMv)
+    
+    @toggled_assert right_ker_rank == rank - 1 "We need a basis for V₁; its dimension must be rk(L)-1"
+
+    # convert back to a type we understand
+    return SMatrix{rank,rank-1}(Matrix(right_ker))
+
 end
 
-# v₀ a vector of the lattice L
-# Let V₁ the orthogonal subspace
-# x ∈ V₁ iff x'*G*v₀  == 0, i.e. x⊙v₀ == 0
-#
-# WARNING: I'm not sure the right_kernel really gives us a basis…
-#
-function basis_of_orhogonal_complement(L::HyperbolicLattice, v0::HyperbolicLatticeElement)
-    @assert v0.L == L
-
-    S = MatrixSpace(ZZ, 1, rank(L))
-    Mv0 = L.G * v0.vec
-    MMv0 = S(reduce(vcat,Mv0))
-    right_ker_rank, right_ker = right_kernel(MMv0)
-    @assert right_ker_rank == rank(L) - 1 "We need a basis!"
-
-
-    span = [u for u in eachcol(Matrix(right_ker))]
-    return span
-
-end
-
-
-# The distance between the hyperplane H_{e} and the point v0
-function sinh_distance_to_hyperplane(v0::HyperbolicLatticeElement, e::HyperbolicLatticeElement)
+"""
+    Computes `sinh(the distance between v and the hyperplane defined by e)`.
+    `e` must be a root.
+"""
+function sinh_distance_to_hyperplane(v::HyperbolicLatticeElement, e::HyperbolicLatticeElement)
     
-    #@assert same_quad_lattice(v0,e) "The elements must belong to the same lattice"
-    #@assert is_root(e)
+    @toggled_assert v.L == e.L
+    @toggled_assert is_root(e)
     
-    return sqrt( - (e⊙v0)^2 / ( norm(e)*norm(v0) ) ) 
-end 
-# The distance between the hyperplane H_{e} and the point v0
-function distance_to_hyperplane(v0::HyperbolicLatticeElement, e::HyperbolicLatticeElement)
-    
-    return asinh( sinh_distance_to_hyperplane(v0,e) )
-
+    return sqrt( - (e⊙v)^2 / ( norm(e)*norm(v) ) ) 
 end 
 
+distance_to_hyperplane(v::HyperbolicLatticeElement, e::HyperbolicLatticeElement) =  asinh( sinh_distance_to_hyperplane(v,e) )
 
-function signature(G)
-    
-    D,P = diagonalize(G)
-    pos = filter(>(0),diag(D))
-    neg = filter(<(0),diag(D))
-    
-    return (length(pos),length(neg))
-end
-
-
-function assert_sig_n_1_matrix(G)
-    
-    @assert length(size(G)) == 2            "G must be a matrix"
-    @assert size(G)[1] == size(G)[2]        "G must be square"
-    @assert issymmetric(G)                  "G must be symmetric"
-    np = size(G)[1]
-    @assert true "TODO"  (np-1,1) == signature(G)        "G must have signature (n,1)" 
-end
-
-
-
+"""
+Find a vector of negative norm in the lattice, by diagonalization.
+"""
 function negative_vector(L::HyperbolicLattice)
-
-    assert_sig_n_1_matrix(L.G)  
     
-    # np = n+1
-    np = rank(L)
-    # Find P and D diagonal such that P'GP = D is diagonal
+    rank = rk(L)
+    
+    # Find `P` and `D` diagonal such that `P'GP = D` is diagonal
     G,D,P = L.G,L.D,L.P 
-    @assert P'*G*P == Diagonal(L.D)
+    @toggled_assert P'*G*P == Diagonal(D)
 
-    # D Necessarily has one negative entry since of signature (n,1)
+    # D necessarily has one negative entry since the signature of `G` is `(rk-1,1)`
     # Find the element corresponding to this negative entry
-    v0 = [P'[i,:] for i in eachindex(D) if D[i]<0][1]
-    # normalize it 
-    v0 = (1//gcd(v0))*v0
+    v₀_vec = [P'[i,:] for i in eachindex(D) if D[i]<0][1]
+    # Normalize it 
+    v₀_vec = (1//gcd(v₀_vec))*v₀_vec
     
-    v0 = HyperbolicLatticeElement(L,SVector{rank(L),Int}(v0))
+    v₀ = HyperbolicLatticeElement(L,SVector{rank,Int}(v₀_vec))
     
 
     # verify that it indeed has negative norm
-    @assert norm(v0) < 0 "v₀ must have negative norm"
+    @toggled_assert norm(v₀) < 0 "v₀ must have negative norm"
 
-    return v0
+    return v₀
 
 end
 

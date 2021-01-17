@@ -12,7 +12,16 @@ using Memoize
 # Hopefully Int512 is enough
 
 
+iff(a::Bool,b::Bool) = a&&b || (!a)&&(!b)
 
+function signature(G)
+    
+    D,P = diagonalize(G)
+    pos = filter(>(0),diag(D))
+    neg = filter(<(0),diag(D))
+    
+    return (length(pos),length(neg))
+end
 
 function diagonalize(A::Array{Int,2}) 
     return diagonalize(SMatrix{size(A)[1],size(A)[2],Int}(A))

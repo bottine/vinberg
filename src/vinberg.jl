@@ -23,7 +23,7 @@ function is_necessary_hyperplane(rr::Vector{HyperbolicLatticeElement},r::Hyperbo
     #@assert is_root(r)
     #@assert all(is_root(ro) for ro in rr)
 
-    return is_necessary_hyperplane(Vector{SVector{rank(L),Int}}([ro.vec for ro in rr]),r.L.G,r.vec)
+    return is_necessary_hyperplane(Vector{SVector{rk(L),Int}}([ro.vec for ro in rr]),r.L.G,r.vec)
 
 end
 
@@ -79,13 +79,13 @@ function is_finite_volume(roots::Array{HyperbolicLatticeElement,(1)},VL::Vinberg
     #display(Coxeter_matrix)
     #println()
     #println("-----------------------------------")
-    return isnothing(Coxeter_matrix) ? false : is_fin_vol(Coxeter_matrix,rank(VL.L)-1)
+    return isnothing(Coxeter_matrix) ? false : is_fin_vol(Coxeter_matrix,rk(VL.L)-1)
     
 end
 
 
-function Vinberg_Algorithm(G::Array{Int,2};v0vec::Union{Array{Int,1},Nothing}=nothing,rounds=nothing)
-    VL = VinbergLattice(G;v0vec=v0vec)
+function Vinberg_Algorithm(G::Array{Int,2};v₀_vec::Union{Array{Int,1},Nothing}=nothing,rounds=nothing)
+    VL = VinbergLattice(G;v₀_vec=v₀_vec)
     return Vinberg_Algorithm(VL;rounds=rounds)
 end
 
@@ -95,7 +95,7 @@ function Vinberg_Algorithm(VL::VinbergLattice;rounds=nothing)
     @inline decrease(r) = (r === nothing ? nothing : r-1)
     geqzero(r) = (r=== nothing ? true : r ≥ 0)
 
-    v0 = VL.v0
+    v₀ = VL.v₀
     G = VL.L.G
     
     new_roots_iterator = RootsByDistance(VL)
@@ -123,15 +123,15 @@ function Vinberg_Algorithm(VL::VinbergLattice;rounds=nothing)
         
 
 
-        #println("($(length(roots)))trying $(new_root.vec)             [$(distance_to_hyperplane(v0,new_root))]")
+        #println("($(length(roots)))trying $(new_root.vec)             [$(distance_to_hyperplane(v₀,new_root))]")
         
-        #while !(all((new_root⊙r) ≤ 0 for r in roots) && times_v0(VL,new_root) < 0) && num_remaining_rounds > 0
-        while !(all(pt * new_root.vec ≤ 0 for pt in partial_times) && times_v0(VL,new_root) < 0) && geqzero(rounds) 
+        #while !(all((new_root⊙r) ≤ 0 for r in roots) && times_v₀(VL,new_root) < 0) && num_remaining_rounds > 0
+        while !(all(pt * new_root.vec ≤ 0 for pt in partial_times) && times_v₀(VL,new_root) < 0) && geqzero(rounds) 
             
             rounds = decrease(rounds)
 
             new_root = next!(new_roots_iterator)
-            #println("($(length(roots)))trying $(new_root.vec)            [$(distance_to_hyperplane(v0,new_root))]")
+            #println("($(length(roots)))trying $(new_root.vec)            [$(distance_to_hyperplane(v₀,new_root))]")
         end
 
         #println("new root : $(new_root.vec)")
@@ -156,7 +156,7 @@ include("Some_Lattices.jl")
 function test_some_lattices()
     for (name,matrix,basepoint,roots,rounds) in Lattice_table
         println("Checking $name")
-        @assert Vinberg_Algorithm(matrix;v0vec=basepoint,rounds=rounds) == roots "$name failed!" 
+        @assert Vinberg_Algorithm(matrix;v₀_vec=basepoint,rounds=rounds) == roots "$name failed!" 
     end
 end
 
@@ -167,19 +167,19 @@ function write_all_lattices()
     end
 end
 
-function Vinberg_Algorithm_stats(folder,path;v0vec=nothing)
+function Vinberg_Algorithm_stats(folder,path;v₀_vec=nothing)
     G = txtmat_path_to_matrix(joinpath(folder,path))
-    roots,time = @timed Vinberg_Algorithm(VinbergLattice(G,v0vec=v0vec))
-    v0vec = VinbergLattice(G,v0vec=v0vec).v0.vec
-    #return JSON.json(Dict("path"=>path,"matrix"=>G,"v0"=>v0vec,"roots"=>roots,"time"=>time))
-    return Dict("path"=>path,"matrix"=>G,"v0"=>v0vec,"roots"=>roots,"time"=>time)
+    roots,time = @timed Vinberg_Algorithm(VinbergLattice(G,v₀_vec=v₀_vec))
+    v₀_vec = VinbergLattice(G,v₀_vec=v₀_vec).v₀.vec
+    #return JSON.json(Dict("path"=>path,"matrix"=>G,"v₀"=>v₀_vec,"roots"=>roots,"time"=>time))
+    return Dict("path"=>path,"matrix"=>G,"v₀"=>v₀_vec,"roots"=>roots,"time"=>time)
 end
 
 
 function all_json_output()
     outs = []
     for (name,matrix,basepoint,roots,rounds) in Lattice_table
-        push!(outs,"\t" * Vinberg_Algorithm_JSON_output("lattices/"*name,v0vec=basepoint))
+        push!(outs,"\t" * Vinberg_Algorithm_JSON_output("lattices/"*name,v₀_vec=basepoint))
     end
     
     return "["*join(outs,", ")*"]"
@@ -212,7 +212,7 @@ function test_suite(label=nothing;cache_behaviour=:empty_batched)
         for entry in known_values
             path = String(entry["path"])
             matrix = Array{Int,2}(hcat(entry["matrix"]...))
-            v0vec = Array{Int,1}(entry["v0"])
+            v₀_vec = Array{Int,1}(entry["v0"])
             roots = Array{Array{Int,1},1}(entry["roots"])
             time = Float64(entry["time"])
             time_history = "time_history" ∈ keys(entry) ? Dict{String,Float64}(entry["time_history"]) : Dict{String,Float64}()
@@ -228,8 +228,8 @@ function test_suite(label=nothing;cache_behaviour=:empty_batched)
                 empty!(memoize_cache(is_necessary_hyperplane))
             end 
 
-            my_roots,my_time = @timed Vinberg_Algorithm(VinbergLattice(G,v0vec=v0vec))
-            v0vec = VinbergLattice(G,v0vec=v0vec).v0.vec
+            my_roots,my_time = @timed Vinberg_Algorithm(VinbergLattice(G,v₀_vec=v₀_vec))
+            v₀_vec = VinbergLattice(G,v₀_vec=v₀_vec).v₀.vec
             
              
             if label≠nothing

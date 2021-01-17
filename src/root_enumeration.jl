@@ -1,4 +1,3 @@
-
 include("util.jl")
 include("qsolve.jl")
 include("hyperbolic_lattices.jl")
@@ -17,16 +16,16 @@ end
 
 function RootsByDistance(VL::VinbergLattice)
     
-    v0 = VL.v0
+    v₀ = VL.v₀
 
-    W_reps = VL.W_reps
+    W = VL.W
 
 
     next_least_a0s_for_k_and_w = Vector{Tuple{Int,HyperbolicLatticeElement,Int,Int}}()
      
-    for w in W_reps, k in root_lengths(VL.L)
-        least::Rational{Int} = -times_v0(VL,w)//VL.v0norm # -(w⊙v0)/(v0⊙v0)
-        #@info "least($(w.vec),$k) at $least"
+    for w in W, k in root_lengths(VL.L)
+        least::Rational{Int} = -times_v₀(VL,w)//VL.v₀_norm # -(w⊙v₀)/(v₀⊙v₀)
+        @debug "least($(w.vec),$k) at $least"
         least_plus::Int = ceil(least)
         least_minus::Int = floor(least)
         push!(next_least_a0s_for_k_and_w, (k,w,least_plus,least_minus))
@@ -34,7 +33,6 @@ function RootsByDistance(VL::VinbergLattice)
 
 
     current_a0_and_k_and_w::Union{Nothing,Tuple{Int,Int,HyperbolicLatticeElement}} = nothing
-    #current_a0_and_k_and_w = nothing;
     roots_for_current_a0_and_k_and_w::Vector{HyperbolicLatticeElement} = Vector{HyperbolicLatticeElement}()
     
     current_fake_dist::Union{Nothing,Rational{Int}} = nothing
@@ -45,11 +43,11 @@ end
 
 
 function next_with_decomposition!(r::RootsByDistance)
-    #@info "> next!(roots_by_distance)"
-    v0 = r.VL.v0
+    #@debug "> next!(roots_by_distance)"
+    v₀ = r.VL.v₀
     VL = r.VL
 
-    to_minimize(a0,k,w) = (a0*VL.v0norm + (times_v0(VL,w)))^2//k 
+    to_minimize(a0,k,w) = (a0*VL.v₀_norm + (times_v₀(VL,w)))^2//k 
     
 
     while r.current_a0_and_k_and_w === nothing || isempty(r.roots_for_current_a0_and_k_and_w)
@@ -87,12 +85,12 @@ function next_with_decomposition!(r::RootsByDistance)
         r.next_least_a0s_for_k_and_w[min_idx] = (k,w,a0plus,a0minus)
 
         # we update fake_dist
-        r.current_fake_dist = (a0*VL.v0norm + VL.v0vec_times_G ⋅ w.vec)^2 // k
+        r.current_fake_dist = (a0*VL.v₀_norm + times_v₀(VL,w))^2 // k
 
-        r.roots_for_current_a0_and_k_and_w = roots_decomposed_into(r.VL,a0*v0 + w,k)
+        r.roots_for_current_a0_and_k_and_w = roots_decomposed_into(r.VL,a0*v₀ + w,k)
     end
  
-    #@info "< next!(roots_by_distance)"
+    #@debug "< next!(roots_by_distance)"
     return (r.current_a0_and_k_and_w,pop!(r.roots_for_current_a0_and_k_and_w),r.current_fake_dist)
 
 end
@@ -123,22 +121,22 @@ function roots_decomposed_into(VL::VinbergLattice, a::HyperbolicLatticeElement, 
     # (v₁+a)⊙(v₁+a) = k iff  v₁⊙v₁ + 2 v₁⊙a = k-a⊙a,
     # and
    
-    #@info "> roots_decomposed_into(VL, $(a.vec), $k)"
-    #println("…  $((-(a⊙VL.v0))/(k^0.5))")
+    #@debug "> roots_decomposed_into(VL, $(a.vec), $k)"
+    #println("…  $((-(a⊙VL.v₀))/(k^0.5))")
     
-    r = rank(VL.L)
-    V1Mat = VL.V1Mat
+    r = rk(VL.L)
+    V₁_basis_matrix = VL.V₁_basis_matrix
 
-    #solutions = qsolve_naive(BigInt.(V1Mat' * VL.L.G * V1Mat), BigInt.(V1Mat' * VL.L.G * a.vec), BigInt(a⊙a - k))
-    A::SMatrix{r-1,r-1,Int} = V1Mat' * VL.L.G * V1Mat
-    b::SVector{r-1,Int} = 2 *( V1Mat' * VL.L.G * a.vec)
+    #solutions = qsolve_naive(BigInt.(V₁_basis_matrix' * VL.L.G * V₁_basis_matrix), BigInt.(V₁_basis_matrix' * VL.L.G * a.vec), BigInt(a⊙a - k))
+    A::SMatrix{r-1,r-1,Int} = V₁_basis_matrix' * VL.L.G * V₁_basis_matrix
+    b::SVector{r-1,Int} = 2 *( V₁_basis_matrix' * VL.L.G * a.vec)
     γ::Int = a⊙a - k
     solutions = qsolve(A, b, γ)
-    #println("qsolve ", V1Mat' * VL.L.G * V1Mat, " , ", 2 *(V1Mat' * VL.L.G * a.vec), " , " ,  a⊙a - k)
+    #println("qsolve ", V₁_basis_matrix' * VL.L.G * V₁_basis_matrix, " , ", 2 *(V₁_basis_matrix' * VL.L.G * a.vec), " , " ,  a⊙a - k)
     #println(solutions)
-    solutions_in_L::Array{HyperbolicLatticeElement,1} = (x -> HyperbolicLatticeElement(VL.L,V1Mat * x + a.vec)).(solutions)
+    solutions_in_L::Array{HyperbolicLatticeElement,1} = (x -> HyperbolicLatticeElement(VL.L,V₁_basis_matrix * x + a.vec)).(solutions)
      
-    #@info "< roots_decomposed_into(VL, $(a.vec), $k)"
+    #@debug "< roots_decomposed_into(VL, $(a.vec), $k)"
     return filter(is_root,solutions_in_L)
 end
 
@@ -153,7 +151,7 @@ function enumerate_roots(VL;num=200,file=nothing)
         while num > 0
             println("next root $num")
             r = next_with_decomposition!(roots_by_distance)
-            #println("$(r.vec) : $((sinh_distance_to_hyperplane(VL.v0,r))^2)")
+            #println("$(r.vec) : $((sinh_distance_to_hyperplane(VL.v₀,r))^2)")
             @assert r[3] ≥ last_fake_dist
             last_fake_dist = r[3]
             push!(roots,r)
