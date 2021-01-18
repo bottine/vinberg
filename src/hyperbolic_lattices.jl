@@ -180,7 +180,15 @@ function Base.:*(k::Int, v::HyperbolicLatticeElement)
 end 
 
 """
-Whether an element of a hyperbolic lattice is a root.
+    Ordering on `HyperboliclatticeElement` simply defined as the ordering on their representing vectors.
+"""
+function Base.isless(v::HyperbolicLatticeElement, w::HyperbolicLatticeElement)
+    @toggled_assert v.L == w.L "The elements must belong to the same lattice"
+    return Base.isless(v.vec,w.vec)
+end
+
+"""
+Whether an element of a hyperbolic lattice element is a root.
 We follow B&P in our definition of a root; `v` is a root if:
 
 * `v` has positive norm.
@@ -321,7 +329,7 @@ function Base.convert(v::HyperbolicLatticeElement)
 end
 
 """
-    fake_dist(VL,e) == -(e⊙v₀)²//e⊙e
+    fake_dist(VL,e) == (e⊙v₀)²//e⊙e
 
 where `VL::VinbergLattice` and `e::HyperbolicLatticeElement` is assumed to be a root.
 The actual distance between the vector `v₀` and the hyperplane `e^⟂` in the hyperbolic space `ℍ^n` is monotonous with this "fake distance".
@@ -331,10 +339,10 @@ function fake_dist(VL::VinbergLattice,e::HyperbolicLatticeElement)
 
     @toggled_assert is_root(e)
     @toggled_assert e.L == VL.L
-    @toggled_assert -(VL.v₀_vec_times_G ⋅ e.vec)^2//(e⊙e) == -(e⊙v₀)^2//e⊙e
-    @toggled_assert -times_v₀(VL,e.vec)^2//(e⊙e) == -(e⊙v₀)^2//e⊙e
+    @toggled_assert (VL.v₀_vec_times_G ⋅ e.vec)^2//(e⊙e) == (e⊙VL.v₀)^2//(e⊙e)
+    @toggled_assert times_v₀(VL,e)^2//(e⊙e) == (e⊙VL.v₀)^2//(e⊙e)
     
-    return -times_v₀(VL,e.vec)^2//(e⊙e)
+    return times_v₀(VL,e)^2//(e⊙e)
 
 end
 

@@ -100,12 +100,12 @@ function Vinberg_Algorithm(VL::VinbergLattice;rounds=nothing)
     
     new_roots_iterator = RootsByDistance(VL)
 
-    roots_at_distance_zero = Vector{HyperbolicLatticeElement}()
-    (new_root,d) = next_with_dist!(new_roots_iterator)
-    while d == 0
-        push!(roots_at_distance_zero,new_root)
-        (new_root,d) = next_with_dist!(new_roots_iterator)
-    end
+    roots_at_distance_zero::Vector{HyperbolicLatticeElement} = next_at_distance_zero!(new_roots_iterator)
+#    new_root = next!(new_roots_iterator)
+#    while fake_dist(VL,new_root) == 0
+#        push!(roots_at_distance_zero,new_root)
+#        new_root = next!(new_roots_iterator)
+#    end
     sort!(roots_at_distance_zero,by=(x->x.vec))
     
     roots::Array{HyperbolicLatticeElement,(1)} = roots_of_fundamental_cone(VL,roots_at_distance_zero)
@@ -114,12 +114,10 @@ function Vinberg_Algorithm(VL::VinbergLattice;rounds=nothing)
 
 
     start = true
-
-
+    new_root = next!(new_roots_iterator)
+    
     while start || ( ! is_finite_volume(roots,VL) && geqzero(rounds))
         start = false
-        
-
         
 
 
@@ -229,7 +227,8 @@ function test_suite(label=nothing;cache_behaviour=:empty_batched)
             end 
 
             my_roots,my_time = @timed Vinberg_Algorithm(VinbergLattice(G,v₀_vec=v₀_vec))
-            v₀_vec = VinbergLattice(G,v₀_vec=v₀_vec).v₀.vec
+            VL = VinbergLattice(G,v₀_vec=v₀_vec)
+            v₀_vec = VL.v₀.vec
             
              
             if label≠nothing
@@ -237,7 +236,10 @@ function test_suite(label=nothing;cache_behaviour=:empty_batched)
             end
 
             if my_roots ≠ roots
-                println("ERROR on roots")
+                println("$(length(my_roots)) vs $(length(roots))")
+                display([(r,fake_dist(VL,VL.L(r))) for r in my_roots])
+                println("vs")
+                display([(r,fake_dist(VL,VL.L(SVector{rk(VL.L)}(r)))) for r in roots])
                 @assert false
             end
 
