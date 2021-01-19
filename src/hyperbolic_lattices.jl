@@ -316,6 +316,8 @@ function Base.:(==)(L1::VinbergLattice,L2::VinbergLattice)
 end
 
 """
+    VinbergLattice(G[;v₀_vec])
+
 Construct a `VinbergLattice`, with an optional negative norm vector `v₀`.
 If none is provided, one is found by diagonalizing the form.
 """

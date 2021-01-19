@@ -183,7 +183,7 @@ function test_get_integer_points()
 
 end
 
-@memoize Dict function is_necessary_hyperplane(cone_roots::Vector{SVector{rank,Int}},root::SVector{rank,Int}) where {rank}
+@memoize Dict function is_necessary_halfspace(cone_roots::Vector{SVector{rank,Int}},root::SVector{rank,Int}) where {rank}
 
     @assert A' == A
 
@@ -217,9 +217,9 @@ end
 
 
 # better to memoize _after_multiplication with A
-function is_necessary_hyperplane(cone_roots::Vector{SVector{rank,Int}},A::SMatrix{rank,rank,Int},root::SVector{rank,Int}) where {rank}
+function is_necessary_halfspace(cone_roots::Vector{SVector{rank,Int}},A::SMatrix{rank,rank,Int},root::SVector{rank,Int}) where {rank}
     
-    return is_necessary_hyperplane((r -> A*r).(cone_roots),A*root)
+    return is_necessary_halfspace((r -> A*r).(cone_roots),A*root)
 
 end
 

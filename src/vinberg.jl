@@ -3,154 +3,15 @@ include("qsolve.jl")
 include("diagrams.jl")
 include("hyperbolic_lattices.jl")
 include("root_enumeration.jl")
+include("vinberg_algorithm.jl")
+include("Some_Lattices.jl")
 
 # Code adapted from N. V. Bogachev and A. Yu. Perepechko:
 #
 #   https://github.com/aperep/vinberg-algorithm
 
 
-# TODO
-#
-# * See here for memoization: https://github.com/JuliaCollections/Memoize.jl
-# * Extensive unit tests!
-#
 
-
-function is_necessary_hyperplane(rr::Vector{HyperbolicLatticeElement},r::HyperbolicLatticeElement)
-    
-    L = r.L
-    #@assert all(ro.L == r.L for ro in rr)
-    #@assert is_root(r)
-    #@assert all(is_root(ro) for ro in rr)
-
-    return is_necessary_hyperplane(Vector{SVector{rk(L),Int}}([ro.vec for ro in rr]),r.L.G,r.vec)
-
-end
-
-function drop_redundant_roots(roots::Vector{HyperbolicLatticeElement})
-
-    for i in reverse(collect(1:length(roots)))
-       
-        rr = copy(roots)
-        r = popat!(rr,i)
-        #r = roots[i]
-        #rr = vcat(roots[1:i-1], roots[i+1:end])
-        
-
-        if ! is_necessary_hyperplane(rr,r)
-            return drop_redundant_roots(rr) 
-        end
-    end
-    
-    return roots
-    
-end
-
-function roots_of_fundamental_cone(VL::VinbergLattice,roots_at_distance_zero::Vector{HyperbolicLatticeElement})
-
-
-    possible_roots = roots_at_distance_zero
-
-    cone_roots::Vector{HyperbolicLatticeElement} = Vector()
-    for r in possible_roots
-        if  all((-1)*r ≠ cr for cr in cone_roots) # && all(r⊙cr ≤ 0 for cr in cone_roots)
-            # TODO Second (commented) condition not in B&P but it makes sense…
-            # Why is it not needed?
-            if is_necessary_hyperplane(cone_roots, r)  && is_necessary_hyperplane(cone_roots, (-1)*r)
-                push!(cone_roots,r)
-                #cone_roots = drop_redundant_roots(cone_roots)
-            end
-        
-        end
-        
-    end
-    
-    #return cone_roots
-    return drop_redundant_roots(cone_roots)
-
-end
-
-function is_finite_volume(roots::Array{HyperbolicLatticeElement,(1)},VL::VinbergLattice)
-    Gram_matrix = Int.(reduce(hcat,[[r1⊙r2 for r1 in roots] for r2 in roots]))
-    #println("gram matrix is ")
-    #display(Gram_matrix)
-    Coxeter_matrix = Gram_to_Coxeter(Gram_matrix)
-    #println("Coxeter matrix is")
-    #display(Coxeter_matrix)
-    #println()
-    #println("-----------------------------------")
-    return isnothing(Coxeter_matrix) ? false : is_fin_vol(Coxeter_matrix,rk(VL.L)-1)
-    
-end
-
-
-function Vinberg_Algorithm(G::Array{Int,2};v₀_vec::Union{Array{Int,1},Nothing}=nothing,rounds=nothing)
-    VL = VinbergLattice(G;v₀_vec=v₀_vec)
-    return Vinberg_Algorithm(VL;rounds=rounds)
-end
-
-function Vinberg_Algorithm(VL::VinbergLattice;rounds=nothing)
-
-   
-    @inline decrease(r) = (r === nothing ? nothing : r-1)
-    geqzero(r) = (r=== nothing ? true : r ≥ 0)
-
-    v₀ = VL.v₀
-    G = VL.L.G
-    
-    new_roots_iterator = RootsByDistance(VL)
-
-    roots_at_distance_zero::Vector{HyperbolicLatticeElement} = next_at_distance_zero!(new_roots_iterator)
-#    new_root = next!(new_roots_iterator)
-#    while fake_dist(VL,new_root) == 0
-#        push!(roots_at_distance_zero,new_root)
-#        new_root = next!(new_roots_iterator)
-#    end
-    sort!(roots_at_distance_zero,by=(x->x.vec))
-    
-    roots::Array{HyperbolicLatticeElement,(1)} = roots_of_fundamental_cone(VL,roots_at_distance_zero)
-    partial_times = [r.vec' * G for r in roots]
-
-
-
-    start = true
-    new_root = next!(new_roots_iterator)
-    
-    while start || ( ! is_finite_volume(roots,VL) && geqzero(rounds))
-        start = false
-        
-
-
-        #println("($(length(roots)))trying $(new_root.vec)             [$(distance_to_hyperplane(v₀,new_root))]")
-        
-        #while !(all((new_root⊙r) ≤ 0 for r in roots) && times_v₀(VL,new_root) < 0) && num_remaining_rounds > 0
-        while !(all(pt * new_root.vec ≤ 0 for pt in partial_times) && times_v₀(VL,new_root) < 0) && geqzero(rounds) 
-            
-            rounds = decrease(rounds)
-
-            new_root = next!(new_roots_iterator)
-            #println("($(length(roots)))trying $(new_root.vec)            [$(distance_to_hyperplane(v₀,new_root))]")
-        end
-
-        #println("new root : $(new_root.vec)")
-        if true # is_necessary_hyperplane(roots,new_root)
-            # seems like this is always satisfied?
-            #
-            push!(roots,new_root)
-            push!(partial_times,new_root.vec' * G)
-        end
-        #println("now have : $([r.vec for r in roots])")
-
-    end
-   
-    println("Decision ($(rounds)) :", is_finite_volume(roots,VL))
-    println("can we drop hyperplanes? $(length(roots)) vs $(length(drop_redundant_roots(roots)))")
-    return [r.vec for r in roots]
-
-end
-
-
-include("Some_Lattices.jl")
 function test_some_lattices()
     for (name,matrix,basepoint,roots,rounds) in Lattice_table
         println("Checking $name")
@@ -197,7 +58,7 @@ function test_suite(label=nothing;cache_behaviour=:empty_batched)
 
     if cache_behaviour == :empty_batched
             empty!(memoize_cache(qsolve_iterative))
-            empty!(memoize_cache(is_necessary_hyperplane))
+            empty!(memoize_cache(is_necessary_halfspace))
     end
 
     open("lattices/known_values.json", "r") do io
@@ -223,7 +84,7 @@ function test_suite(label=nothing;cache_behaviour=:empty_batched)
             if cache_behaviour == :empty_singles
                 println("emptying caches")
                 empty!(memoize_cache(qsolve_iterative))
-                empty!(memoize_cache(is_necessary_hyperplane))
+                empty!(memoize_cache(is_necessary_halfspace))
             end 
 
             my_roots,my_time = @timed Vinberg_Algorithm(VinbergLattice(G,v₀_vec=v₀_vec))
