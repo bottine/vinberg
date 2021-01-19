@@ -6,7 +6,7 @@ include("qsolve.jl")
 include("hyperbolic_lattices.jl")
 
 """
-Given a `VinbergLattice` with underlying lattice ``L``, basepoint ``v₀``, orthogonal complement ``V₁=v₀^⟂`` and representatives ``W`` for the sublattice ``⟨v₀⟩⊕V₁``, any element ``u`` of ``L`` can be uniquely represented as 
+Given a `VinbergLattice` with underlying lattice ``L``, basepoint ``v₀``, orthogonal complement ``V₁=v₀^⟂`` and coset representatives ``W`` for the sublattice ``⟨v₀⟩⊕V₁``, any element ``u`` of ``L`` can be uniquely represented as 
 ```math
     u = a₀v₀ + v₁ + w
 ``` 
@@ -378,9 +378,12 @@ function roots_decomposed_into(VL::VinbergLattice, a::HyperbolicLatticeElement, 
     
     # Translate them back
     solutions_in_L::Array{HyperbolicLatticeElement,1} = (b -> VL.L(M₁ * b + a.vec)).(solutions)
-    
-    # Filter to get roots only
-    return filter(is_root,solutions_in_L)
+    @toggled_assert all(norm(u) == k for u in solutions_in_L) "``u⊙u`` must be equal to k"
+    @toggled_assert all((u-a)⊙VL.v₀ == 0 for u in solutions_in_L) "``u-a`` must lie in `V₁`"
+
+
+    # Filter to get roots only (we know that `k` is the norm of `u`, so feed it to `is_root` already)
+    return filter(u->is_root(u,k),solutions_in_L)
 end
 
 

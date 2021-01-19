@@ -122,11 +122,14 @@ struct HyperbolicLatticeElement{rank}
     vec::SVector{rank,Int}
 end
 
+
 """
-    Creates a hyperbolic lattice element out of a lattice `L` and a vector `vec` using the syntax `L(vec)`
+    Create a hyperbolic lattice element out of a lattice `L` and a vector `vec` by first converting `vec` to a `SVector`.
+    Allows using the syntax `L(vec)`.
 """
 function (L::HyperbolicLattice)(vec)
-    HyperbolicLatticeElement(L,vec)
+    svec = SVector{rk(L),Int}(vec)
+    HyperbolicLatticeElement(L,svec)
 end
 
 function Base.show(io::IO,v::HyperbolicLatticeElement) 
@@ -142,8 +145,10 @@ function Base.:(==)(v1::HyperbolicLatticeElement,v2::HyperbolicLatticeElement)
 end
 
 """
-    Computes the inner_product of the two elements.
-    Obtained as `v' * G * w`.
+    inner_product(v,w)
+
+Compute the inner_product of its two arguments in their common lattice.
+Obtained as `v' * G * w`.
 """
 function inner_product(v::HyperbolicLatticeElement,w::HyperbolicLatticeElement)
     @toggled_assert v.L == w.L "The elements must belong to the same lattice"
@@ -167,7 +172,7 @@ function standard_basis(L::HyperbolicLattice)
 end
 
 function Base.:-(v::HyperbolicLatticeElement) 
-    return HyperbolicLatticeElement(-v.vec,v.L)
+    return HyperbolicLatticeElement(v.L,-v.vec)
 end 
 
 function Base.:+(v::HyperbolicLatticeElement,w::HyperbolicLatticeElement)
@@ -175,12 +180,17 @@ function Base.:+(v::HyperbolicLatticeElement,w::HyperbolicLatticeElement)
     return HyperbolicLatticeElement(v.L,v.vec+w.vec)
 end 
 
+function Base.:-(v::HyperbolicLatticeElement,w::HyperbolicLatticeElement)
+    @toggled_assert v.L == w.L "The elements must belong to the same lattice"
+    return v + (-w) 
+end 
+
 function Base.:*(k::Int, v::HyperbolicLatticeElement)
     return HyperbolicLatticeElement(v.L,k*v.vec)
 end 
 
 """
-    Ordering on `HyperboliclatticeElement` simply defined as the ordering on their representing vectors.
+Ordering on `HyperboliclatticeElement` simply defined as the ordering on their representing vectors.
 """
 function Base.isless(v::HyperbolicLatticeElement, w::HyperbolicLatticeElement)
     @toggled_assert v.L == w.L "The elements must belong to the same lattice"
@@ -188,7 +198,28 @@ function Base.isless(v::HyperbolicLatticeElement, w::HyperbolicLatticeElement)
 end
 
 """
-Whether an element of a hyperbolic lattice element is a root.
+    crystallographic_condition(v[, norm_v])
+
+Test whether ``v`` satisfies the crystallographic condition in its lattice ``L``, that is, whether ``v⊙w`` is in ``L`` for any ``w`` in ``L``.
+If `norm_v` is not `nothing`, use it as the norm of `v`, i.e. assume that `norm(v) == norm_v`.
+"""
+@inline function crystallographic_condition(v::HyperbolicLatticeElement,norm_v=nothing::Union{Nothing,Int})
+    # 
+    nv = norm_v === nothing ? norm(v) : norm_v
+    @toggled_assert iff(
+                        all(2*(e⊙v) % (v⊙v) == 0 for e in standard_basis(v.L)), 
+                        all(2*(col⋅v.vec) % nv == 0 for col in eachcol(v.L.G))
+                       ) "Optimized check for the crystallographic condition should be equivalent to the complete one."
+    return all(2*(col⋅v.vec) % nv == 0 for col in eachcol(v.L.G))
+
+end
+
+"""
+    is_root(v[, norm_v])
+
+Test whether  `v` is a root of its lattice.
+If `norm_v` is not nothing, assume it is equal to the norm of `v`, i.e. `norm_v == norm(v)`
+
 We follow B&P in our definition of a root; `v` is a root if:
 
 * `v` has positive norm.
@@ -196,9 +227,9 @@ We follow B&P in our definition of a root; `v` is a root if:
 * `v` satisfies the crystallographic condition, meaning that reflecting along `v` preserves the lattice.
   This can be checked by verifying that the reflection of elements of the standard basis are still in the lattice.
 """
-function is_root(v::HyperbolicLatticeElement)
+function is_root(v::HyperbolicLatticeElement,norm_v=nothing::Union{Nothing,Int})
     
-    nv = norm(v)
+    nv = norm_v === nothing ? norm(v) : norm_v
     
     # A root has  positive norm.
     # TODO: check that it's indeed "positive" and not "non-negative"
@@ -219,11 +250,7 @@ function is_root(v::HyperbolicLatticeElement)
     end
 
     # A root respects the crystallographic condition
-    @toggled_assert iff(
-                        all(2*(e⊙v) % (v⊙v) == 0 for e in standard_basis(v.L)), 
-                        all(2*(col⋅v.vec) % nv == 0 for col in eachcol(v.L.G))
-                       ) "Optimized check for the crystallographic condition should be equivalent to the complete one."
-    if ! all(2*(col⋅v.vec) % nv == 0 for col in eachcol(v.L.G))
+    if !crystallographic_condition(v,nv) 
         return false
     end
 
@@ -233,27 +260,27 @@ end
 
 
 """
-    A `VinbergLattice` is simply a `HyperbolicLattice` `L` plus a choice of vector `v₀` of the lattice, of negative norm.
-    Given `L` and `v₀`, some more objects can be computed:
-    Let `V₁` be the subgroup of `L` consisting of elements orthogonal to v₀, i.e. `V₁ = v₀^⟂`.
-    We can compute a basis of `V₁`, using methods of the package `AbstractAlgebra`.
-    The sublattice `⟨v₀⟩⊕V₁` is of finite index in L, and we can therefore find a finite set of (coset) representatives.
+A `VinbergLattice` is simply a `HyperbolicLattice` `L` plus a choice of vector `v₀` of the lattice, of negative norm.
+Given `L` and `v₀`, some more objects can be computed:
+Let `V₁` be the subgroup of `L` consisting of elements orthogonal to v₀, i.e. `V₁ = v₀^⟂`.
+We can compute a basis of `V₁`, using methods of the package `AbstractAlgebra`.
+The sublattice `⟨v₀⟩⊕V₁` is of finite index in L, and we can therefore find a finite set of (coset) representatives.
 
-    We therefore store:
-    
-    * The lattice `L`,
-    * The negative norm vector `v₀`
+We therefore store:
 
-    And the related data for convenience/performance:
+* The lattice `L`,
+* The negative norm vector `v₀`
 
-    * `V₁_basis_matrix` is rank×rank_minus_1 matrix whose columns are a basis for `V₁`
-    * `W` a set of coset representatives for the sublattice `⟨v₀⟩⊕V₁`.
-    * `v₀_vec_times_G == v₀.vec' * G` corresponds to the computation v₀.vec ⋅ G, which makes multiplication of v₀ with other elements faster:
-      `v₀⊙e = v₀.vec' * L.G * e.vec = v₀_vec_times_G * e.vec` so that we can skip one matrix multiplication
-    * `v₀_norm == v₀⊙v₀` is the norm of v₀, which we precompute sincet it is used often.
+And the related data for convenience/performance:
 
-    Note that the type VinbergLattice{rank,rank_minus_1} is parametrized by the two parameters `rank,rank_minus_1`, but they must satisfy `rank-1 == rank_minus_1`.
-    This useless second parameter is due to a [limitation of julia](https://discourse.julialang.org/t/addition-to-parameter-of-parametric-type/20059/5).
+* `V₁_basis_matrix` is rank×rank_minus_1 matrix whose columns are a basis for `V₁`
+* `W` a set of coset representatives for the sublattice `⟨v₀⟩⊕V₁`.
+* `v₀_vec_times_G == v₀.vec' * G` corresponds to the computation v₀.vec ⋅ G, which makes multiplication of v₀ with other elements faster:
+  `v₀⊙e = v₀.vec' * L.G * e.vec = v₀_vec_times_G * e.vec` so that we can skip one matrix multiplication
+* `v₀_norm == v₀⊙v₀` is the norm of v₀, which we precompute sincet it is used often.
+
+Note that the type VinbergLattice{rank,rank_minus_1} is parametrized by the two parameters `rank,rank_minus_1`, but they must satisfy `rank-1 == rank_minus_1`.
+This useless second parameter is due to a [limitation of julia](https://discourse.julialang.org/t/addition-to-parameter-of-parametric-type/20059/5).
 """
 struct VinbergLattice{rank,rank_minus_1}
     
