@@ -89,11 +89,10 @@ function roots_of_fundamental_cone(VL::VinbergLattice,roots_at_distance_zero::Ve
         if  all((-1)*r ≠ cr for cr in cone_roots) #  && all(cr⊙r ≤ 0 for cr in cone_roots)
             @info "Its opposite is not in the previous cone_roots."
            
-            # Test that the halfspace defined by `r` cuts the cone into two non-degenerate cones, i.e. 
-            # * `r` is necessary (checked by `is_necessary_halfspace(cone_roots, r)`, and,
-            # * adding the halfspace ``ℋ_r⁻`` doesn't make the resulting cone degenerate (checked by `is_necessary_halfspace(cone_roots, -r`) 
-            if is_necessary_halfspace(cone_roots, r) && is_necessary_halfspace(cone_roots, -r)
-                @info "And it cuts the cone into two non-degenerate parts; adding it."
+            # Test that adding the halfspace ``ℋ_r⁻`` defined by `r` doesn't make the resulting cone degenerate (checked by `is_necessary_halfspace(cone_roots, -r`).
+            # Indeed, the intersection becomes degenerate iff the intersection with ``ℋ_{-r}⁻ = ℋ_r⁺`` is /not/ strictly smaller than the original cone, which is iff ``-r`` defines a necessary halfspace.
+            if is_necessary_halfspace(cone_roots, -r)
+                @info "And it does not make the cone degenerate."
                 
                 push!(cone_roots,r)
 

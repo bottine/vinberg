@@ -1,3 +1,5 @@
+using Logging
+
 include("util.jl")
 include("qsolve.jl")
 include("diagrams.jl")
@@ -45,7 +47,13 @@ function all_json_output()
 end
 
 
-function test_suite(label=nothing;cache_behaviour=:empty_batched)
+function test_suite(label=nothing;cache_behaviour=:empty_batched,log_location=nothing)
+
+    if log_location ≠ nothing 
+        println("Logging to $log_location")
+        logger = SimpleLogger(open(log_location,"w+"))
+        global_logger(logger)
+    end
 
     seen = []
     
