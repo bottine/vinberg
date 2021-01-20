@@ -1,4 +1,11 @@
+# 𝐕𝐢𝐧𝐧𝐲 𝐭𝐡𝐞 𝐜𝐨𝐱𝐛𝐨𝐲 & 𝐉𝐮𝐥𝐢𝐚
+
+### Learning to herd Coxeter diagrams in the Hyperbolic Plains since 2021
+
+***
+
 # Port of [aperep/vinberg-algorithm](https://github.com/aperep/vinberg-algorithm) to julia, plus some changes
+
 
 ## Still being tested: probably many bugs left!
 

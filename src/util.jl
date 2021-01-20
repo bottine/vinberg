@@ -216,7 +216,6 @@ end
 end
 
 
-# better to memoize _after_multiplication with A
 function is_necessary_halfspace(cone_roots::Vector{SVector{rank,Int}},A::SMatrix{rank,rank,Int},root::SVector{rank,Int}) where {rank}
     
     return is_necessary_halfspace((r -> A*r).(cone_roots),A*root)
