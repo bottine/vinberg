@@ -172,9 +172,8 @@ function roots_of_fundamental_cone(VL::VinbergLattice,roots_at_distance_zero::Ve
 end
 
 function is_finite_volume(roots::Array{HyperbolicLatticeElement,(1)},VL::VinbergLattice)
-    Gram_matrix = Int.(reduce(hcat,[[r1⊙r2 for r1 in roots] for r2 in roots]))
-    Coxeter_matrix = Gram_to_Coxeter(Gram_matrix)
-    return isnothing(Coxeter_matrix) ? false : is_fin_vol(Coxeter_matrix,rk(VL.L)-1)
+    Coxeter_matrix = reduce(hcat,[[Coxeter_coeff(r₁,r₂) for r₁ in roots] for r₂ in roots])
+    return any(isnothing(c) for c in Coxeter_matrix) ? false : is_fin_vol(Int.(Coxeter_matrix),rk(VL.L)-1)
     
 end
 

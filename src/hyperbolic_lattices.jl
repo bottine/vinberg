@@ -190,6 +190,41 @@ function Base.:*(k::Int, v::HyperbolicLatticeElement)
 end 
 
 """
+    Coxeter_coeff(r₁,r₂)
+
+Compute the label corresponding to the edge between the vertices corresponding to the hyperplanes defined by `r₁` and `r₂` respectively.
+
+# Remarks
+
+* This is incomplete, and only works for acute angles I think.
+* The code is copied from B&P, and I haven't yet made in more general.
+* TODO: probably deserves using `r₁_pp` and `r₂_pp` to skip matrix multiplications where possible.
+"""
+function Coxeter_coeff(r₁::HyperbolicLatticeElement,r₂::HyperbolicLatticeElement)
+    @toggled_assert r₁.L == r₂.L "The elements must belong to the same lattice"
+    @toggled_assert is_root(r₁) && is_root(r₂) "The elements must be roots"
+
+    angle = r₁⊙r₂
+    cos² = angle^2//(norm(r₁)*norm(r₂))
+    if cos² == 0
+        return 2
+    elseif cos² == 1//4
+        return 3
+    elseif cos² == 1//2
+        return 4
+    elseif cos² == 3//4
+        return 6
+    elseif cos² == 1
+        return 0
+    elseif cos² > 1
+        return 1
+    else
+        return nothing
+    end
+
+end
+
+"""
 Ordering on `HyperboliclatticeElement` simply defined as the ordering on their representing vectors.
 """
 function Base.isless(v::HyperbolicLatticeElement, w::HyperbolicLatticeElement)

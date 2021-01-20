@@ -222,6 +222,7 @@ function is_necessary_halfspace(cone_roots::Vector{SVector{rank,Int}},A::SMatrix
 
 end
 
+
 function Gram_to_Coxeter(G::Matrix{Int})
     # stolen from B&P
     function weight(M, i, j)
