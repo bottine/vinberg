@@ -6,28 +6,6 @@ include("root_enumeration.jl")
 
 
 """
-    is_necessary_halfspace(rr,r[,rrpp,rpp])
-
-Given the collection of roots `rr` and a root `r`, tests whether the halfspace ``ℋ_r⁻`` is redundant for the convex cone 
-```math
-    ⋂_{r₀∈rr} ℋ_{r₀}⁻
-```
-(with ``ℋ_v^± = \\{u: ±u⊙v≥0\\}``).
-
-"""
-function is_necessary_halfspace(rr::Vector{HyperbolicLatticeElement},r::HyperbolicLatticeElement)
-    
-    L = r.L
-    @toggled_assert all(ro.L == r.L for ro in rr)
-    @toggled_assert is_root(r)
-    @toggled_assert all(is_root(ro) for ro in rr)
-
-    return is_necessary_halfspace(Vector{SVector{rk(L),Int}}([ro.vec for ro in rr]),r.L.G,r.vec)
-
-end
-
-
-"""
 Given the collection of roots `rr` and a root `r`, (and the corresponding partial products `rr_pp` and `r_pp`) tests whether the halfspace ``ℋ_r⁻`` is redundant for the convex cone 
 ```math
     ⋂_{r₀∈rr} ℋ_{r₀}⁻
@@ -37,9 +15,9 @@ Given the collection of roots `rr` and a root `r`, (and the corresponding partia
 """ 
 function is_necessary_halfspace(
     rr#=::Vector{HyperbolicLatticeElement{n}}=#,
-    rrpp#=::Vector{SVector{n,Int}}=#,
+    rr_pp#=::Vector{SVector{n,Int}}=#,
     r#=::HyperbolicLatticeElement{n}=#,
-    rpp#=::SVector{n,Int}=#
+    r_pp#=::SVector{n,Int}=#
 ) #where {n}
     
     #TODO: put signature back in a way that the compiler likes
@@ -47,34 +25,12 @@ function is_necessary_halfspace(
     L = r.L
     @toggled_assert all(ro.L == r.L for ro in rr)
     @toggled_assert is_root(r)
-    @toggled_assert L.G*r.vec == rpp
+    @toggled_assert L.G*r.vec == r_pp
     @toggled_assert all(is_root(ro) for ro in rr)
-    @toggled_assert all(L.G*ro.vec == ropp for (ro,ropp) in zip(rr,rrpp))
+    @toggled_assert all(L.G*ro.vec == ro_pp for (ro,ro_pp) in zip(rr,rr_pp))
 
-    return is_necessary_halfspace(rrpp,rpp)
+    return is_necessary_halfspace(rr_pp,r_pp)
 
-end
-
-
-"""
-    drop_redundant_halfspaces(roots)
-
-Given the collection of roots `roots` defining a cone, drop all which are redundant in the halfspace decomposition of the cone. 
-"""
-function drop_redundant_halfspaces(roots::Vector{HyperbolicLatticeElement})
-    
-    for i in reverse(collect(1:length(roots)))
-       
-        rr = copy(roots)
-        r = popat!(rr,i)
-
-        if ! is_necessary_halfspace(rr,r)
-            return drop_redundant_halfspaces(rr) 
-        end
-    end
-    
-    return roots
-    
 end
 
 
@@ -85,7 +41,7 @@ Given the collection of roots `roots` defining a cone and the corresponding part
 """
 function drop_redundant_halfspaces(
     roots#=::Vector{HyperbolicLatticeElement{n}}=#,
-    rootspp#=::Vector{SVector{n,Int}}=#
+    roots_pp#=::Vector{SVector{n,Int}}=#
 )# where {n}
     
     #TODO: put signature back in a way that the compiler likes
@@ -94,15 +50,15 @@ function drop_redundant_halfspaces(
        
         rr = copy(roots)
         r = popat!(rr,i)
-        rrpp = copy(rootspp)
-        rpp = popat!(rrpp,i)
+        rr_pp = copy(roots_pp)
+        r_pp = popat!(rr_pp,i)
 
-        if ! is_necessary_halfspace(rrpp,rpp)
-            return drop_redundant_halfspaces(rr,rrpp) 
+        if ! is_necessary_halfspace(rr_pp,r_pp)
+            return drop_redundant_halfspaces(rr,rr_pp) 
         end
     end
     
-    return (roots,rootspp)
+    return (roots,roots_pp)
     
 end
 
@@ -148,16 +104,13 @@ function roots_of_fundamental_cone(VL::VinbergLattice,roots_at_distance_zero::Ve
                 
                 push!(cone_roots,r)
                 push!(cone_roots_pp,r_pp)
-
-                @debug "Dropping now redundant halfspaces."
-                (cone_roots,cone_roots_pp) = drop_redundant_halfspaces(cone_roots, cone_roots_pp)
             end
         
         end
         
     end
     
-    # TODO: It could make sense to not drop redundant halfspaces at each step, but only in the end: I don't know whether it's more efficient.
+    (cone_roots,cone_roots_pp) = drop_redundant_halfspaces(cone_roots, cone_roots_pp)
     @info "Returning cone roots, numbering $(length(cone_roots))."
     return (cone_roots, cone_roots_pp)
 
@@ -265,7 +218,7 @@ function Vinberg_Algorithm(VL::VinbergLattice;rounds=nothing)
     end
    
     println("Decision ($(rounds)) :", is_finite_volume(roots,VL))
-    println("can we drop hyperplanes? $(length(roots)) vs $(length(drop_redundant_halfspaces(roots)))")
+    println("can we drop hyperplanes? $(length(roots)) vs $(length(drop_redundant_halfspaces(roots,roots_pp)[1]))")
     return [r.vec for r in roots]
 
 end
