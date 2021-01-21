@@ -9,7 +9,18 @@
 
 ## Still being tested: probably many bugs left!
 
-
 * Finite volume check for Coxeter diagrams implemented “from scratch” using Guglielmetti's thesis as theoretical resource and [`CoxIter`](https://github.com/rgugliel/CoxIter) as comparison point (plus a majority of tests from there)
 * The main bulk of Vinberg's algorithm (and associated procedures) ported from [B&P](https://github.com/aperep/vinberg-algorithm)
 * Using https://raw.githubusercontent.com/chethega/StaticArrays.jl/fb0350012f01db4021d60906357e949333ec5d93/src/SBitSet.jl for a fixed size bitset implementation. **TODO** contact author to ask if we can use their code, and under what licence (see [here](https://github.com/chethega/StaticBitsets.jl/issues/1)).
+
+## How to use
+
+* Go to the root folder of the project (having subfolder `lattices`,`graphs`,`src`).
+* Launch julia with `julia`
+* call `include("src/vinberg.jl")`.
+
+Now everything needed is loaded.
+
+* To run the Vinberg Algorithm on a lattice given by a matrix `M`, call `Vinberg_Algorithm(M)`.
+* Some matrices are accessible through the dictionary `L`, for instance `L["Vin07_L1"]` contains one matrix of Vinberg.
+
