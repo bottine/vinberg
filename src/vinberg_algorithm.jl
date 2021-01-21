@@ -1,3 +1,4 @@
+
 include("util.jl")
 include("qsolve.jl")
 include("diagrams.jl")
@@ -170,7 +171,17 @@ function Vinberg_Algorithm(
     # and sort them (this is not necessary for the algorithm, but ensures a level of predictability in the output)
     sort!(roots_at_distance_zero)
     @info "Got all roots at distance zero."
-    
+   
+    @info "Creating a channel for root enumeration (buffer size 1024)" 
+    new_roots_channel =  Channel{HyperbolicLatticeElement}(1024) # 1024 chosen arbitrarily
+    @info "Starting the root enumeration process."
+    Threads.@spawn begin
+        while true
+            @debug "Another root in the channel!"
+            put!(new_roots_channel,next!(new_roots_iterator))
+        end
+    end
+
     # Get all roots defining a fundamental cone for `v₀`
     # Note that there is some degree of freedom here since `v₀` can lie in different cones.
     # But once a cone is fixed, all the other roots appearing afterwards are uniquely defined.
@@ -184,31 +195,33 @@ function Vinberg_Algorithm(
 
     start = true
 
-    new_root = next!(new_roots_iterator)
-    @debug "Trying with the root $new_root."
     
-    while start || (!is_finite_volume(diagram) && geqzero(rounds))
-        start = false
+    for (round_num,new_root) in enumerate(new_roots_channel)
+       
+        # breaking if maximal number of rounds has been reached
+        !isnothing(rounds) && rounds ≤ round_num && break 
 
+        @debug "Trying new root $new_root."
         
         @toggled_assert iff(
                             (all(r_pp' * new_root.vec ≤ 0 for r_pp in roots_pp) && times_v₀(VL,new_root) < 0),
                             (all((new_root⊙r) ≤ 0 for r in roots) && VL.v₀ ⊙ new_root < 0)
                            ) "Precomputed products should be the same as non-precomputed ones."
-
         
-        
-
-        while !(all(r_pp' * new_root.vec ≤ 0 for r_pp in roots_pp) && times_v₀(VL,new_root) < 0) && geqzero(rounds) 
-            rounds = decrease(rounds)
-            @debug "The root either does not face away from v₀ or doesn't satisfy the acute angle condition."
-
-            new_root = next!(new_roots_iterator)
-            @debug "Trying with the root $new_root."
+        # Acute angle condition
+        if any(r_pp' * new_root.vec > 0 for r_pp in roots_pp)
+            @debug "It doesn't satisfy the acute angle condition; discarding it."
+            continue
         end
 
+        # v₀ on the correct side of the halfspace
+        if times_v₀(VL,new_root) ≥ 0
+            @debug "The corresponding halfspace doesn't contain v₀; discarding it."
+            continue
+        end
+        
         new_root_pp = G*new_root.vec
-        @info "Testing whether the root defines a necessary hyperplane."
+        @debug "Testing whether the root defines a necessary hyperplane."
         if is_necessary_halfspace(roots, roots_pp, new_root, new_root_pp)
            
             # Extending the subdiagrams collection
@@ -218,7 +231,17 @@ function Vinberg_Algorithm(
             push!(roots,new_root)
             push!(roots_pp,new_root_pp)
 
-            @info "It does; adding it to our collection."
+            @debug "It does; adding it to our collection."
+        else
+
+            @debug "It doesn't: discarding it"
+            continue
+        end
+
+        @info "Found new satisfying root: $new_root."
+        if is_finite_volume(diagram)
+            @info "And the diagram has finite volume."
+            break
         end
 
     end
