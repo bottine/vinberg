@@ -546,8 +546,8 @@ end
 
 function extend!(das::DiagramAndSubs, v::Array{Int,1})
 
-    n = length(v) 
-    @assert size(das.D) == (n,n)
+    n = length(v)
+    @assert size(das.D) == (n,n) "Need $v to have length exactly the number of vertices already present, i.e. $(size(das.D)[1])"
     
     # Extend D with v
     das.D = [das.D v]

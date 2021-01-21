@@ -68,7 +68,10 @@ end
 
 Given the collection `roots_at_distance_zero` of roots at distance zero to `VL.v₀` (technically, roots with induced hyperplane at distance zero from ``v₀``), find a minimal subset defining a fundamental cone containing ``v₀``.
 """
-function roots_of_fundamental_cone(VL::VinbergLattice,roots_at_distance_zero::Vector{HyperbolicLatticeElement})
+function roots_of_fundamental_cone(
+    VL::VinbergLattice,
+    roots_at_distance_zero::Vector{HyperbolicLatticeElement}
+)
     
     @toggled_assert (length(roots_at_distance_zero) == length(Set(roots_at_distance_zero))) "No root should appear more than once (sanity check)."
 
@@ -116,16 +119,6 @@ function roots_of_fundamental_cone(VL::VinbergLattice,roots_at_distance_zero::Ve
 
 end
 
-"""
-    is_finite_volume(roots,VL)
-
-Whether the hyperbolic polyhedron defined by the roots `roots` in ``VL.L`` is of finite volume.
-"""
-function is_finite_volume(roots::Array{HyperbolicLatticeElement,(1)},VL::VinbergLattice)
-    Coxeter_matrix = reduce(hcat,[[Coxeter_coeff(r₁,r₂) for r₁ in roots] for r₂ in roots])
-    return any(isnothing(c) for c in Coxeter_matrix) ? false : is_fin_vol(Int.(Coxeter_matrix),rk(VL.L)-1)
-end
-
 
 """
     Vinberg_Algorithm(G [,v₀vec,rounds])
@@ -135,7 +128,11 @@ Run the Vinberg for `rounds` rounds (or indefinitely if `isnothing(rounds)`)
 * on the lattice given by the quadratic form `G`,
 * with basepoint given by `v₀vec` (or chosen by diagonalization if `isnothing(v₀vec)`).
 """
-function Vinberg_Algorithm(G::Array{Int,2};v₀_vec::Union{Array{Int,1},Nothing}=nothing,rounds=nothing)
+function Vinberg_Algorithm(
+    G::Array{Int,2};
+    v₀_vec::Union{Array{Int,1},Nothing}=nothing,
+    rounds=nothing
+)
     VL = VinbergLattice(G;v₀_vec=v₀_vec)
     return Vinberg_Algorithm(VL;rounds=rounds)
 end
@@ -146,7 +143,10 @@ end
 
 Run the Vinberg algorithm on the lattice ``VL.L`` with basepoint ``VL.v₀`` until `rounds` roots have been considered (if `rounds=nothing`, then the algorithm runs indefinitely long).
 """
-function Vinberg_Algorithm(VL::VinbergLattice;rounds=nothing)
+function Vinberg_Algorithm(
+    VL::VinbergLattice;
+    rounds=nothing
+)
 
     
     # `r` counts the numer of remaining rounds the algorithm is allowed to use.
@@ -159,6 +159,7 @@ function Vinberg_Algorithm(VL::VinbergLattice;rounds=nothing)
 
     v₀ = VL.v₀
     G = VL.L.G
+    n = rk(VL.L)
     
     # initiate our root enumeration object
     new_roots_iterator = RootsByDistance(VL)
@@ -176,49 +177,54 @@ function Vinberg_Algorithm(VL::VinbergLattice;rounds=nothing)
     (roots, roots_pp) = roots_of_fundamental_cone(VL,roots_at_distance_zero)
     @info "Got the roots of a fundamental cone."
 
-    
+    # Construct the corresponding `DiagramAndSubs` object containing all subdiagrams of the Coxeter diagram defined by the roots
+    Coxeter_matrix = reduce(hcat,[[Coxeter_coeff(r₁,r₂) for r₁ in roots] for r₂ in roots])
+    diagram = build_diagram_and_subs(Coxeter_matrix,n-1)
+    @info "Built the corresponding Coxeter diagram."
+
     start = true
 
     new_root = next!(new_roots_iterator)
-    @info "Trying with the root $new_root."
+    @debug "Trying with the root $new_root."
     
-    while start || ( ! is_finite_volume(roots,VL) && geqzero(rounds))
+    while start || (!is_finite_volume(diagram) && geqzero(rounds))
         start = false
-        
-        
 
+        
         @toggled_assert iff(
                             (all(r_pp' * new_root.vec ≤ 0 for r_pp in roots_pp) && times_v₀(VL,new_root) < 0),
                             (all((new_root⊙r) ≤ 0 for r in roots) && VL.v₀ ⊙ new_root < 0)
-                           )
+                           ) "Precomputed products should be the same as non-precomputed ones."
+
         
+        
+
         while !(all(r_pp' * new_root.vec ≤ 0 for r_pp in roots_pp) && times_v₀(VL,new_root) < 0) && geqzero(rounds) 
             rounds = decrease(rounds)
-            @info "The root either does not face away from v₀ or doesn't satisfy the accute angle condition."
+            @debug "The root either does not face away from v₀ or doesn't satisfy the acute angle condition."
 
             new_root = next!(new_roots_iterator)
-            @info "Trying with the root $new_root."
+            @debug "Trying with the root $new_root."
         end
 
         new_root_pp = G*new_root.vec
         @info "Testing whether the root defines a necessary hyperplane."
         if is_necessary_halfspace(roots, roots_pp, new_root, new_root_pp)
-            # seems like this is always satisfied?
-            #
+           
+            # Extending the subdiagrams collection
+            extend!(diagram,[Coxeter_coeff(r,new_root) for r in roots])
+            
+            # And adding the root to our collection.
             push!(roots,new_root)
             push!(roots_pp,new_root_pp)
+
             @info "It does; adding it to our collection."
         end
 
-        # TODO: Here instead of only checking whether new_root defines a necessary hyperplane, we should call 
-        #roots = drop_redundant_halfspaces(roots)
-        # but this implies that we should also correct partial_times
-        # Hence: that's a TODO!
-
     end
    
-    println("Decision ($(rounds)) :", is_finite_volume(roots,VL))
-    println("can we drop hyperplanes? $(length(roots)) vs $(length(drop_redundant_halfspaces(roots,roots_pp)[1]))")
+    println("Decision ($(rounds)) :", is_finite_volume(diagram))
+    @toggled_assert length(roots) == length(drop_redundant_halfspaces(roots,roots_pp)[1])
     return [r.vec for r in roots]
 
 end
