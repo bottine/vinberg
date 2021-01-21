@@ -4,21 +4,11 @@ include("diagrams.jl")
 include("hyperbolic_lattices.jl")
 include("root_enumeration.jl")
 
-# Code adapted from N. V. Bogachev and A. Yu. Perepechko:
-#
-#   https://github.com/aperep/vinberg-algorithm
-
-
-# TODO
-#
-# * See here for memoization: https://github.com/JuliaCollections/Memoize.jl
-# * Extensive unit tests!
-#
 
 """
     is_necessary_halfspace(rr,r[,rrpp,rpp])
 
-Given the collection of roots `rr` and a root `r`, tests whether the halfspace ``ℋ_r⁻`` is redundant for thhe convex cone cone 
+Given the collection of roots `rr` and a root `r`, tests whether the halfspace ``ℋ_r⁻`` is redundant for the convex cone 
 ```math
     ⋂_{r₀∈rr} ℋ_{r₀}⁻
 ```
@@ -36,8 +26,9 @@ function is_necessary_halfspace(rr::Vector{HyperbolicLatticeElement},r::Hyperbol
 
 end
 
+
 """
-Given the collection of roots `rr` and a root `r`, (and the corresponding partial products `rr_pp` and `r_pp`) tests whether the halfspace ``ℋ_r⁻`` is redundant for thhe convex cone cone 
+Given the collection of roots `rr` and a root `r`, (and the corresponding partial products `rr_pp` and `r_pp`) tests whether the halfspace ``ℋ_r⁻`` is redundant for the convex cone 
 ```math
     ⋂_{r₀∈rr} ℋ_{r₀}⁻
 ```
@@ -115,6 +106,7 @@ function drop_redundant_halfspaces(
     
 end
 
+
 """
     roots_of_fundamental_cone(VL,roots_at_distance_zero)
 
@@ -122,20 +114,20 @@ Given the collection `roots_at_distance_zero` of roots at distance zero to `VL.v
 """
 function roots_of_fundamental_cone(VL::VinbergLattice,roots_at_distance_zero::Vector{HyperbolicLatticeElement})
     
-    @toggled_assert (length(roots_at_distance_zero) == length(Set(roots_at_distance_zero))) "No root should appear more than once."
+    @toggled_assert (length(roots_at_distance_zero) == length(Set(roots_at_distance_zero))) "No root should appear more than once (sanity check)."
 
     # Store the candidate roots, and their partial product with G, for efficiency's sake, hopefully ("pp" stands for "partial product")
     candidate_roots = roots_at_distance_zero
     candidate_roots_pp = [VL.L.G * r.vec for r in candidate_roots]
     @info "Found candidate roots for fundamental cone (numbering $(length(candidate_roots)))."
 
-    # Start with an empty set of roots (and partial products) in the cone.
+    # Start with an empty set of roots (and corresponding partial products) in the cone.
     cone_roots::Vector{HyperbolicLatticeElement} = Vector()
     cone_roots_pp::Vector{SVector{rk(VL.L),Int}}= Vector()
 
     # Iterate over all roots (and the precomputed corresponding partial product)
     for (r,r_pp) in zip(candidate_roots,candidate_roots_pp)
-        @info "Considering candidate root $r."
+        @debug "Considering candidate root $r."
 
         # If the opposite of the root already is in the cone roots, adding this one would make the cone degenerate.
         # 
@@ -146,18 +138,18 @@ function roots_of_fundamental_cone(VL::VinbergLattice,roots_at_distance_zero::Ve
         # 
         # Why is that?
         if  all((-1)*r ≠ cr for cr in cone_roots) #  && all(cr⊙r ≤ 0 for cr in cone_roots)
-            @info "Its opposite is not in the previous cone_roots."
+            @debug "Its opposite is not in the previous cone_roots."
            
             # Test that adding the halfspace ``ℋ_r⁻`` defined by `r` doesn't make the resulting cone degenerate (checked by `is_necessary_halfspace(cone_roots, -r`).
             # Indeed, the intersection becomes degenerate iff the intersection with ``ℋ_{-r}⁻ = ℋ_r⁺`` is /not/ strictly smaller than the original cone, which is iff ``-r`` defines a necessary halfspace.
             #if is_necessary_halfspace(cone_roots::Vector{HyperbolicLatticeElement{rk(VL.L)}},cone_roots_pp::Vector{SVector{rk(VL.L),Int}},-r::HyperbolicLatticeElement{rk(VL.L)},-r_pp::SVector{rk(VL.L),Int})
             if is_necessary_halfspace(cone_roots,cone_roots_pp,-r,-r_pp)
-                @info "And it does not make the cone degenerate."
+                @debug "And it does not make the cone degenerate."
                 
                 push!(cone_roots,r)
                 push!(cone_roots_pp,r_pp)
 
-                @info "Dropping now redundant halfspaces."
+                @debug "Dropping now redundant halfspaces."
                 (cone_roots,cone_roots_pp) = drop_redundant_halfspaces(cone_roots, cone_roots_pp)
             end
         
@@ -165,27 +157,41 @@ function roots_of_fundamental_cone(VL::VinbergLattice,roots_at_distance_zero::Ve
         
     end
     
-    #cone_roots = drop_redundant_halfspaces(cone_roots)
-    @info "Returning cone roots amounting to: $(length(cone_roots))."
+    # TODO: It could make sense to not drop redundant halfspaces at each step, but only in the end: I don't know whether it's more efficient.
+    @info "Returning cone roots, numbering $(length(cone_roots))."
     return (cone_roots, cone_roots_pp)
 
 end
 
+"""
+    is_finite_volume(roots,VL)
+
+Whether the hyperbolic polyhedron defined by the roots `roots` in ``VL.L`` is of finite volume.
+"""
 function is_finite_volume(roots::Array{HyperbolicLatticeElement,(1)},VL::VinbergLattice)
     Coxeter_matrix = reduce(hcat,[[Coxeter_coeff(r₁,r₂) for r₁ in roots] for r₂ in roots])
     return any(isnothing(c) for c in Coxeter_matrix) ? false : is_fin_vol(Int.(Coxeter_matrix),rk(VL.L)-1)
 end
 
 
+"""
+    Vinberg_Algorithm(G [,v₀vec,rounds])
+
+Run the Vinberg for `rounds` rounds (or indefinitely if `isnothing(rounds)`) 
+
+* on the lattice given by the quadratic form `G`,
+* with basepoint given by `v₀vec` (or chosen by diagonalization if `isnothing(v₀vec)`).
+"""
 function Vinberg_Algorithm(G::Array{Int,2};v₀_vec::Union{Array{Int,1},Nothing}=nothing,rounds=nothing)
     VL = VinbergLattice(G;v₀_vec=v₀_vec)
     return Vinberg_Algorithm(VL;rounds=rounds)
 end
 
+
 """
     Vinberg_Algorithm(VL::VinbergLattice[;rounds=nothing])
 
-Run the Vinberg algorithm on the lattice `VL.L` with basepoint `VL.v₀` until `rounds` roots have been considered (if `rounds=nothing`, then the algorithm runs indefinitely long).
+Run the Vinberg algorithm on the lattice ``VL.L`` with basepoint ``VL.v₀`` until `rounds` roots have been considered (if `rounds=nothing`, then the algorithm runs indefinitely long).
 """
 function Vinberg_Algorithm(VL::VinbergLattice;rounds=nothing)
 
