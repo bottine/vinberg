@@ -6,7 +6,7 @@ include("diagrams.jl")
 include("hyperbolic_lattices.jl")
 include("root_enumeration.jl")
 include("vinberg_algorithm.jl")
-include("Some_Lattices.jl")
+include("lattice_playground.jl")
 
 # Code adapted from N. V. Bogachev and A. Yu. Perepechko:
 #

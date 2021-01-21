@@ -166,7 +166,7 @@ function roots_of_fundamental_cone(VL::VinbergLattice,roots_at_distance_zero::Ve
     end
     
     #cone_roots = drop_redundant_halfspaces(cone_roots)
-    @info "Dropping rendundant halfspaces; returning cone roots (amounting to: $(length(cone_roots)))."
+    @info "Returning cone roots amounting to: $(length(cone_roots))."
     return (cone_roots, cone_roots_pp)
 
 end
@@ -174,7 +174,6 @@ end
 function is_finite_volume(roots::Array{HyperbolicLatticeElement,(1)},VL::VinbergLattice)
     Coxeter_matrix = reduce(hcat,[[Coxeter_coeff(r₁,r₂) for r₁ in roots] for r₂ in roots])
     return any(isnothing(c) for c in Coxeter_matrix) ? false : is_fin_vol(Int.(Coxeter_matrix),rk(VL.L)-1)
-    
 end
 
 
