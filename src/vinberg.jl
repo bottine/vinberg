@@ -1,10 +1,5 @@
 using Logging
 
-include("util.jl")
-include("qsolve.jl")
-include("diagrams.jl")
-include("hyperbolic_lattices.jl")
-include("root_enumeration.jl")
 include("vinberg_algorithm.jl")
 include("lattice_playground.jl")
 
