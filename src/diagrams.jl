@@ -313,7 +313,7 @@ end
     deg3 = SBitSet{4}()
     deg3_neigh = SBitSet{4}()
 
-    deg_seqs::DegSeq = DegSeq(Vector{Deg}()) 
+    deg_seqs::GenDegSeq = GenDegSeq(Vector{GenDeg}()) 
     for v in VS
 
         @debug "looking at $v"
@@ -436,8 +436,8 @@ end
         return CISD(VS,DT_g2)
     elseif ds == deg_seq_G2
         return CISD(VS,DT_G2)
-    elseif ds == deg_seq_Iinfty
-        return CISD(VS,DT_Iinfty)
+    elseif ds == deg_seq_I∞
+        return CISD(VS,DT_I∞)
     elseif length(ds) == 2  &&
         big_label(ds.content[1]) ≠ nothing &&
         big_label(ds.content[1]) ≥ 7 &&

@@ -1,3 +1,10 @@
+"""
+    gug_coxiter_path_to_matrix(path)
+
+Try to load a "`CoxIter`-formatted" diagram description located at `path` and output the resulting matrix (if nothing goes wrong).
+
+See also: [`gug_coxiter_to_matrix`](@ref)
+"""
 function gug_coxiter_path_to_matrix(path)
     s = open(path) do file
         read(file, String)
@@ -6,6 +13,16 @@ function gug_coxiter_path_to_matrix(path)
     return gug_coxiter_to_matrix(s)
 end
 
+"""
+    gug_coxiter_to_matrix(descr)
+
+Try to decode a "`CoxIter`-formated" diagram description contained in `descr` and output the resulting matrix (if nothing goes wrong).
+Not all options accepted by `CoxIter` are accepted here.
+The following formats are accepted:
+
+* First line: ":number_vertices :rank". Each remaining line ":vertex_number :vertex_number :edge_label".
+* First line: ":number_vertices :rank". Second line: first the litteral "vertices labels:" then a sequence of identifier separated by spaces (must be as many as number_vertices). All reamining lines ":identifier :identifier :edge_label".
+"""
 function gug_coxiter_to_matrix(descr)
    
     lines = split(descr,"\n")
