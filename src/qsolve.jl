@@ -93,7 +93,12 @@ function qsolve_iterative(A::SMatrix{1,1,Int},b::SVector{1, Int},γ::Int;depth=1
    
 end
 
-# seems like their (B&P) version is way better than diagonalization + my naive check
+"""
+    qsolve_iterative(A::SMatrix{rank,rank,Int},b::SVector{rank, Int},γ::Int)
+
+Solves the positive definite problem ``x'Ax + b'x + γ = 0``, using an iterative approach.
+This method is pretty much entirely copied from B&P.
+"""
 @memoize Dict function qsolve_iterative(A::SMatrix{rank,rank,Int},b::SVector{rank, Int},γ::Int;depth=1) where {rank}
         
 
@@ -361,15 +366,4 @@ function test_qsolve()
 
     #qsolve_naive(BigInt.([2 -1 0; -1 2 -1;0 -1 2]) , BigInt.([0, 0, 0]) , BigInt(-12))
 end
-
-   D = [4 0 ;
-        0 1]
-    
-    P = [1 0;
-         0 1]
-    
-    A = P'*D*P
-    
-    b = [20; 20]
-    c = -26
 

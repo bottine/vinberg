@@ -2,6 +2,7 @@ using LinearAlgebra
 
 include("util.jl")
 
+
 """
     save_lattice(lat,name)
 
@@ -45,17 +46,8 @@ U_ = [0 1; 1 0]
 A_(n) = Matrix(SymTridiagonal([2 for i in 1:n], [1 for i in 1:n-1]))
 I_ = I(1)
 
-# Using Vinberg's L(n) naming convention
-Vin07_L1 = 4*U_ ⊕ 2*I_  ⊕ 2*I_
-Vin07_L2 = 2*U_ ⊕ 2*I_  ⊕ 2*I_
-Vin07_L3 = 1*U_ ⊕ 2*I_  ⊕ 2*I_
-Vin07_L4 = 3*U_ ⊕ 2*I_  ⊕ 2*I_
-Vin07_L5 = (-4)*I_ ⊕ A_(3)
-Vin07_L6 = U_ ⊕ 2*I_  ⊕ 8*I_
-Vin07_L15 = U_ ⊕ [2 1;1 10]
+# Using Vinberg's L(n) naming convention, we get, for instance:
 Vin07_L16 = U_ ⊕ [2 1;1 4] 
-Vin07_L17 = U_ ⊕ [2 1;1 14] 
-Vin07_L18 = U_ ⊕ [2 0;0 4] 
 Vin07_L19 = -8*I_ ⊕ A_(3)
 
 # From B&P
