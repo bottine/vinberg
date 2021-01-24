@@ -360,8 +360,6 @@ Plugging this in the equation above yields:
 and now ``M₁'GM₁`` is positive definite (since ``V₁`` is the orthogonal complement of ``v₀`` and ``G`` is of signature ``(n,1)``).
 This results in a "positive definite" quadratic equation for ``b₁``, which we know how to solve. 
 It suffices then to transform back
-    
-
 """
 function roots_decomposed_into(VL::VinbergLattice, a::HyperbolicLatticeElement, k::Int)
     

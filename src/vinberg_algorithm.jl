@@ -150,14 +150,6 @@ function Vinberg_Algorithm(
 )
 
     
-    # `r` counts the numer of remaining rounds the algorithm is allowed to use.
-    # By convention here, nothing can be understood as ∞, so that:
-    # 
-    # * decrease(∞) = ∞;
-    # * ∞ ≥ 0 is true.
-    @inline decrease(r) = (r === nothing ? nothing : r-1)
-    @inline geqzero(r) = (r=== nothing ? true : r ≥ 0)
-
     v₀ = VL.v₀
     G = VL.L.G
     n = rk(VL.L)
@@ -171,9 +163,10 @@ function Vinberg_Algorithm(
     # and sort them (this is not necessary for the algorithm, but ensures a level of predictability in the output)
     sort!(roots_at_distance_zero)
     @info "Got all roots at distance zero."
-   
-    @info "Creating a channel for root enumeration (buffer size 1024)" 
-    new_roots_channel =  Channel{HyperbolicLatticeElement}(1024) # 1024 chosen arbitrarily
+    
+    channel_buffer_size = 10240 # chosen somewhat randomly
+    @info "Creating a channel for root enumeration (buffer size $channel_buffer_size)" 
+    new_roots_channel =  Channel{HyperbolicLatticeElement}(channel_buffer_size)
     @info "Starting the root enumeration process."
     Threads.@spawn begin
         while true
@@ -219,24 +212,13 @@ function Vinberg_Algorithm(
             @debug "The corresponding halfspace doesn't contain v₀; discarding it."
             continue
         end
-        
+       
+        # new_root now satisfies all the requirements to be added to our set of roots.
         new_root_pp = G*new_root.vec
-        @debug "Testing whether the root defines a necessary hyperplane."
-        if is_necessary_halfspace(roots, roots_pp, new_root, new_root_pp)
-           
-            # Extending the subdiagrams collection
-            extend!(diagram,[Coxeter_coeff(r,new_root) for r in roots])
-            
-            # And adding the root to our collection.
-            push!(roots,new_root)
-            push!(roots_pp,new_root_pp)
+        extend!(diagram,[Coxeter_coeff(r,new_root) for r in roots])
+        push!(roots,new_root)
+        push!(roots_pp,new_root_pp)
 
-            @debug "It does; adding it to our collection."
-        else
-
-            @debug "It doesn't: discarding it"
-            continue
-        end
 
         @info "Found new satisfying root: $new_root."
         if is_finite_volume(diagram)

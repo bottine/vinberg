@@ -108,9 +108,6 @@ function rk(L::HyperbolicLattice)
 end
 
 
-
-
-
 """
 An element of a hyperbolic lattice, represented by:
 * `L::HyperbolicLattice`, the lattice it is a member of.

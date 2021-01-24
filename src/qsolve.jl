@@ -8,7 +8,11 @@ using Memoize
 
 include("util.jl")
 
-function qform_minimum(A::SMatrix{rank,rank,Int},b::SVector{rank,Int},γ::Int) where {rank}
+function qform_minimum(
+    A::SMatrix{rank,rank,Int},
+    b::SVector{rank,Int},
+    γ::Int
+) where {rank}
 
     #@info "> qform_minimum(…)"
     minushalf_b = -b//2
