@@ -377,7 +377,7 @@ function VinbergLattice(G::Array{Int,2};v₀_vec::Union{Array{Int,1},Nothing}=no
   
     v₀_norm = norm(v₀)
 
-    @toggled_assert length(W) == abs(det(M)) "The number of representative, i.e. the index of the sublattice must be the same as the determinant of the matrix whose columns are a basis for the sublattice."
+    @toggled_assert length(W) == abs(det(Rational{Int}.(M))) "The number of representative, i.e. the index of the sublattice must be the same as the determinant of the matrix whose columns are a basis for the sublattice.\n Here we have $(length(W)) ≠ $(abs(det(Rational{Int}.(M))))"
     @toggled_assert v₀_norm % length(W) == 0 "According to B&P, the norm of v₀ must divide the index of the sublattice"
    
     v₀_vec_times_G = SVector{rk,Int}(v₀.vec' *  G)
