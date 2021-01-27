@@ -161,7 +161,7 @@ function next!(pats::RootDecompositionPatternsByDistance)::Tuple{Vector{RootDeco
         # Same as for `a₊`
         if min_val === nothing || f_dist(k,w,a₋) < min_val
             min_patterns = Vector{Pattern}([(k,w,a₋)])
-            min_val = fake_dist(k,w,a₋)
+            min_val = f_dist(k,w,a₋)
         elseif f_dist(k,w,a₋) == min_val
             # Here we differ from `a₊`:
             # It may happen that a₋ == a₊ (only at the very beginning, i.e. distance zero from v₀).

@@ -129,7 +129,7 @@ function get_integer_points(M)
 
     bounding_box = [[]] 
     for i in 1:n
-        bounding_box = [vcat(vec, [val]) for vec in bounding_box for val in minimum[i]:maximum[i]-1] 
+        bounding_box = [vcat(vec, [val]) for vec in bounding_box for val in minimum[i]-1:maximum[i]+1] 
     end
     
 #    println("bdng_box size $(length(bounding_box))")
@@ -140,7 +140,7 @@ function get_integer_points(M)
     end
     
     integer_points = [Vector(v) for v in bounding_box if parallelipiped_contains(Vector(v))]
-    @assert length(integer_points) == abs(det(M)) "index = determinant = volume (I think)"
+    @assert length(integer_points) == abs(det(M)) "index = |determinant| = volume (I think)\n but have $(length(integer_points)) ≠ $(abs(det(M)))"
     # TODO is the discrete volume equal always?
 
     return integer_points
