@@ -60,11 +60,7 @@ This is the case where rank=1.
 This method is pretty much entirely copied from B&P.
 **Important.** By convention, if no solutions (even real ones) exist for the equation, returns nothing, and not just an empty list. 
 """
-function qsolve_iterative(
-    A::SMatrix{1,1,Int},
-    b::SVector{1, Int},
-    γ::Int
-) where {rank}
+function qsolve_iterative(A::SMatrix{1,1,Int},b::SVector{1, Int},γ::Int) where {rank}
     
     a = A[1,1]
     b = b[1]
@@ -79,10 +75,7 @@ Solve the positive definite problem ``x'Ax + b'x + γ = 0`` with integral soluti
 This method is pretty much entirely copied from B&P.
 **Important.** By convention, if no solutions (even real ones) exist for the equation, returns nothing, and not just an empty list. 
 """
-@memoize Dict function qsolve_iterative(
-    A::SMatrix{rank,rank,Int},
-    b::SVector{rank, Int},
-    γ::Int
+@memoize Dict function qsolve_iterative(A::SMatrix{rank,rank,Int},b::SVector{rank, Int},γ::Int
 ) where {rank}
 
 

@@ -164,7 +164,7 @@ function Vinberg_Algorithm(
     sort!(roots_at_distance_zero)
     @info "Got all roots at distance zero."
     
-    channel_buffer_size = 10240 # chosen somewhat randomly
+    channel_buffer_size = 16 # Big value is horrible for performace, I don't know why. TODO: make the buffer know the rank of the lattice element so that maybe it will work better (objects are then of known size) 
     @info "Creating a channel for root enumeration (buffer size $channel_buffer_size)" 
     new_roots_channel =  Channel{HyperbolicLatticeElement}(channel_buffer_size)
     @info "Starting the root enumeration process."

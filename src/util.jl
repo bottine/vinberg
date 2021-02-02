@@ -167,7 +167,7 @@ end
     # it should only be strictly bigger than zero, but Convex.jl does not do "strictly", so we change it to ≥ 1 (and since we have a cone, it should be the same result)
 
     
-    solve!(p,Cbc.Optimizer(verbose=0,loglevel=0), verbose=false, warmstart=true)
+    solve!(p,Cbc.Optimizer(verbose=0,loglevel=0), verbose=false, warmstart=false)
    
 
     if p.status == MathOptInterface.INFEASIBLE 
