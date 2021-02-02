@@ -7,6 +7,7 @@ using MathOptInterface
 using BitIntegers
 using StaticArrays
 using Memoize
+using ToggleableAsserts
 # To do diagonalization on StaticArrays, we need fixed-size element types, so BigInt is out.
 # But we still need to have big integers.
 # Hopefully Int512 is enough
@@ -118,7 +119,10 @@ end
 
 function get_integer_points(M)
   
-    M = Rational{Int}.(M)
+    invM = inv(M) 
+    # TODO: Maybe we want an exact inverse: invM = inv(Rational{Int}.(M)) 
+    # But I think approximate is enough
+
 
     n = size(M,1)
     @assert (n,n) == size(M) "Matrix should be square (and invertible)"
@@ -132,56 +136,19 @@ function get_integer_points(M)
         bounding_box = [vcat(vec, [val]) for vec in bounding_box for val in minimum[i]-1:maximum[i]+1] 
     end
     
-#    println("bdng_box size $(length(bounding_box))")
-
     function parallelipiped_contains(v)
-        Q = inv(M)*v
+        Q = invM*v
         return all(c < 1 && c >= 0 for c in Q)
     end
     
     integer_points = [Vector(v) for v in bounding_box if parallelipiped_contains(Vector(v))]
-    @assert length(integer_points) == abs(det(M)) "index = |determinant| = volume (I think)\n but have $(length(integer_points)) ≠ $(abs(det(M)))"
+    @toggled_assert length(integer_points) == abs(detRational{Int}.((M))) "index = |determinant| = volume (I think)\n but have $(length(integer_points)) ≠ $(abs(det(Rational{Int}.(M))))"
     # TODO is the discrete volume equal always?
 
     return integer_points
 
 end
 
-function get_sublattice_representatives(M)
-  
-    M = Rational{Int}.(M)
-
-
-    n = size(M,1)
-    @assert (n,n) == size(M) "Matrix should be square (and invertible)"
-    @assert det(M) ≠ 0 "Matrix should be square (and invertible)"
-
-    M2 = M
-    for i in 2:n
-        if M2[i,:] ⋅ M2[1,:] < 0
-            M2[i,:] = -M2[i,:]
-            @assert M2[i,:] ⋅ M2[1,:] > 0
-        end
-    end
-
-    @assert length(get_integer_points(M)) == length(get_integer_points(M2))
-
-end
-
-
-
-
-function test_get_integer_points()
-    
-    for n in 4:6
-        println("\nn is $n")
-        for i in 1:4*(10-n)
-            M = rand(-10:10,n,n)
-            get_integer_points(M)
-        end
-    end
-
-end
 
 @memoize Dict function is_necessary_halfspace(cone_roots::Vector{SVector{rank,Int}},root::SVector{rank,Int}) where {rank}
 
