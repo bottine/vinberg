@@ -142,7 +142,7 @@ function get_integer_points(M)
     end
     
     integer_points = [Vector(v) for v in bounding_box if parallelipiped_contains(Vector(v))]
-    @toggled_assert length(integer_points) == abs(detRational{Int}.((M))) "index = |determinant| = volume (I think)\n but have $(length(integer_points)) ≠ $(abs(det(Rational{Int}.(M))))"
+    @toggled_assert length(integer_points) == abs(det(Rational{Int}.((M)))) "index = |determinant| = volume (I think)\n but have $(length(integer_points)) ≠ $(abs(det(Rational{Int}.(M))))"
     # TODO is the discrete volume equal always?
 
     return integer_points

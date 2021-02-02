@@ -375,7 +375,7 @@ function roots_decomposed_into(VL::VinbergLattice, a::HyperbolicLatticeElement, 
     solutions = qsolve(A, b, γ)
     
     # Translate them back
-    #solutions_in_L::Array{HyperbolicLatticeElement,1} = (b -> VL.L(M₁ * b + a.vec)).(solutions)
+    #solutions_in_L::Array{HyperbolicLatticeElement,1} = (b -> VL.L(M₁ * b + a.vec)).(solutions) # This is prettier, but performance-wise horrible. TODO: investigate
     solutions_in_L::Array{HyperbolicLatticeElement,1} = (b -> HyperbolicLatticeElement(VL.L,M₁ * b + a.vec)).(solutions)
     @toggled_assert all(norm(u) == k for u in solutions_in_L) "``u⊙u`` must be equal to k"
     @toggled_assert all((u-a)⊙VL.v₀ == 0 for u in solutions_in_L) "``u-a`` must lie in `V₁`"
