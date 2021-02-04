@@ -19,6 +19,7 @@
 
 ## How to use
 
+* If not already installed, run `julia install_packages.jl` to install the packages used in the code.
 * Go to the root folder of the project (having subfolder `lattices`,`graphs`,`src`).
 * Launch julia with `julia -t auto` to enable multithreading (might be useful, but on small examples does't look like it is)
 * call `include("src/vinberg.jl")`.
@@ -28,4 +29,6 @@ Now everything needed is loaded.
 
 * To run the Vinberg Algorithm on a lattice given by a matrix `M`, call `Vinberg_Algorithm(M)`.
 * Some matrices are accessible through the dictionary `L`, for instance `L["Vin07_L1"]` contains one matrix of Vinberg.
+
+
 
