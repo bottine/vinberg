@@ -117,7 +117,9 @@ function test_diagonalize()
 
 end 
 
-function get_integer_points(M)
+function get_integer_points(
+    M::SMatrix{rank,rank,Int}
+)::Vector{SVector{rank,Int}} where {rank}
   
     invM = inv(M) 
     # TODO: Maybe we want an exact inverse: invM = inv(Rational{Int}.(M)) 
@@ -133,15 +135,18 @@ function get_integer_points(M)
 
     bounding_box = [[]] 
     for i in 1:n
-        bounding_box = [vcat(vec, [val]) for vec in bounding_box for val in minimum[i]-1:maximum[i]+1] 
+        # TODO: check that the removal of our safety ±1 is OK
+        #bounding_box = [vcat(vec, [val]) for vec in bounding_box for val in minimum[i]-1:maximum[i]+1] 
+        bounding_box = [vcat(vec, [val]) for vec in bounding_box for val in minimum[i]:maximum[i]] 
     end
+    bb = [SVector{rank,Int}(v) for v in bounding_box]
     
-    function parallelipiped_contains(v)
+    function parallelipiped_contains(v::SVector{rank,Int})
         Q = invM*v
         return all(c < 1 && c >= 0 for c in Q)
     end
     
-    integer_points = [Vector(v) for v in bounding_box if parallelipiped_contains(Vector(v))]
+    integer_points = [v for v in bb if parallelipiped_contains(v)]
     @toggled_assert length(integer_points) == abs(det(Rational{Int}.((M)))) "index = |determinant| = volume (I think)\n but have $(length(integer_points)) ≠ $(abs(det(Rational{Int}.(M))))"
     # TODO is the discrete volume equal always?
 
