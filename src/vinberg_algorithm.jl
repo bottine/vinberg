@@ -97,7 +97,7 @@ function roots_of_fundamental_cone(
         # * It actually yields wrong results.
         # 
         # Why is that?
-        if  all((-1)*r ≠ cr for cr in cone_roots) #  && all(cr⊙r ≤ 0 for cr in cone_roots)
+        if  all((-1)*r ≠ cr for cr in cone_roots) # && all(cr.vec' *r_pp < 0 for cr in cone_roots)
             @debug "Its opposite is not in the previous cone_roots."
            
             # Test that adding the halfspace ``ℋ_r⁻`` defined by `r` doesn't make the resulting cone degenerate (checked by `is_necessary_halfspace(cone_roots, -r`).

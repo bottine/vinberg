@@ -235,14 +235,14 @@ end
 Test whether ``v`` satisfies the crystallographic condition in its lattice ``L``, that is, whether ``v⊙w`` is in ``L`` for any ``w`` in ``L``.
 If `norm_v` is not `nothing`, use it as the norm of `v`, i.e. assume that `norm(v) == norm_v`.
 """
-@inline function crystallographic_condition(v::HyperbolicLatticeElement,norm_v=nothing::Union{Nothing,Int})
-    # 
-    nv = norm_v === nothing ? norm(v) : norm_v
+function crystallographic_condition(v::HyperbolicLatticeElement,norm_v=nothing::Union{Nothing,Int})
+     
+    nv::Int = norm_v === nothing ? norm(v) : norm_v
     @toggled_assert iff(
                         all(2*(e⊙v) % (v⊙v) == 0 for e in standard_basis(v.L)), 
-                        all(2*(col⋅v.vec) % nv == 0 for col in eachcol(v.L.G))
+                        all(2*(row⋅v.vec) % nv == 0 for row in eachrow(v.L.G))
                        ) "Optimized check for the crystallographic condition should be equivalent to the complete one."
-    return all(2*(col⋅v.vec) % nv == 0 for col in eachcol(v.L.G))
+    return all((2*(col⋅v.vec)) % nv == 0 for col in eachcol(v.L.G))
 
 end
 
@@ -261,7 +261,7 @@ We follow B&P in our definition of a root; `v` is a root if:
 """
 function is_root(v::HyperbolicLatticeElement,norm_v=nothing::Union{Nothing,Int})
     
-    nv = norm_v === nothing ? norm(v) : norm_v
+    nv::Int = norm_v === nothing ? norm(v) : norm_v
     
     # A root has  positive norm.
     # TODO: check that it's indeed "positive" and not "non-negative"
