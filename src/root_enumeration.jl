@@ -385,4 +385,33 @@ function roots_decomposed_into(VL::VinbergLattice, a::HyperbolicLatticeElement, 
     return filter(u->is_root(u,k),solutions_in_L)
 end
 
+"""
+    iterate(r::RootsByDistance)
+
+Return the next root of `r` and nothing, and update `r` accordingly.
+
+# Warning
+
+I think normally the function `iterate` should not mutate the iterator but store the state elsewhere, which I am not doing!
+I'm implementing this method to make it possible to use a `for` loop to iterate over `r`
+"""
+function iterate(r::RootsByDistance)
+    root = next!(r)
+    return (root,nothing)
+end
+
+"""
+    iterate(r::RootsByDistancei,n::Nothing)
+
+Return the next root of `r` and nothing, and update `r` accordingly.
+
+# Warning
+
+I think normally the function `iterate` should not mutate the iterator but store the state elsewhere, which I am not doing!
+I'm implementing this method to make it possible to use a `for` loop to iterate over `r`
+"""
+function iterate(r::RootsByDistance,n::Nothing)
+    root = next!(r)
+    return (root,n)
+end
 

@@ -382,6 +382,11 @@ function VinbergLattice(G::Array{Int,2};v₀_vec::Union{Array{Int,1},Nothing}=no
    
     v₀_vec_times_G = SVector{rk,Int}(v₀.vec' *  G)
 
+    @info "Initialized Vinberg Lattice:"
+    @info "v₀ is $v₀"
+    @info "V₁_basis_matrix is $V₁_basis_matrix"
+    @info "W is $W"
+
     return VinbergLattice(L,v₀,V₁_basis_matrix,W,v₀_vec_times_G,v₀_norm)   
 end
 

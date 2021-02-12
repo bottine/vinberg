@@ -132,21 +132,33 @@ function get_integer_points(
 
     minimum = [sum([min(v,0) for v in M[i,:]]) for i in 1:n]
     maximum = [sum([max(v,0) for v in M[i,:]]) for i in 1:n]
-
-    bounding_box = [[]] 
-    for i in 1:n
-        # TODO: check that the removal of our safety ±1 is OK
-        #bounding_box = [vcat(vec, [val]) for vec in bounding_box for val in minimum[i]-1:maximum[i]+1] 
-        bounding_box = [vcat(vec, [val]) for vec in bounding_box for val in minimum[i]:maximum[i]] 
-    end
-    bb = [SVector{rank,Int}(v) for v in bounding_box]
     
-    function parallelipiped_contains(v::SVector{rank,Int})
+    function parallelipiped_contains(v#=::SVector{rank,Int}=#)
         Q = invM*v
         return all(c < 1 && c >= 0 for c in Q)
     end
+  
+    dtr = Int(abs(det(Rational{Int}.((M)))))
+    integer_points = Vector{SVector{n,Int}}(undef, dtr) 
+    v = copy(minimum)
+    i = 1
+    while v ≠ maximum # TODO maybe we should allow v=maximum and stop right after ?
+        if parallelipiped_contains(v) 
+            integer_points[i] = SVector{n,Int}(v)
+            i += 1
+        end
+        
+        idx = 1
+        while v[idx] == maximum[idx]
+            v[idx] = minimum[idx]
+            idx += 1
+        end
+        v[idx] += 1
+
+    end
     
-    integer_points = [v for v in bb if parallelipiped_contains(v)]
+    @toggled_assert i-1 == dtr
+    #integer_points = [v for v in bb if parallelipiped_contains(v)]
     @toggled_assert length(integer_points) == abs(det(Rational{Int}.((M)))) "index = |determinant| = volume (I think)\n but have $(length(integer_points)) ≠ $(abs(det(Rational{Int}.(M))))"
     # TODO is the discrete volume equal always?
 

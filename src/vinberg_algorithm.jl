@@ -164,17 +164,6 @@ function Vinberg_Algorithm(
     sort!(roots_at_distance_zero)
     @info "Got all roots at distance zero."
     
-    channel_buffer_size = 16 # Big value is horrible for performace, I don't know why. TODO: make the buffer know the rank of the lattice element so that maybe it will work better (objects are then of known size) 
-    @info "Creating a channel for root enumeration (buffer size $channel_buffer_size)" 
-    new_roots_channel =  Channel{HyperbolicLatticeElement}(channel_buffer_size)
-    @info "Starting the root enumeration process."
-    Threads.@spawn begin
-        while true
-            @debug "Another root in the channel!"
-            put!(new_roots_channel,next!(new_roots_iterator))
-        end
-    end
-
     # Get all roots defining a fundamental cone for `v₀`
     # Note that there is some degree of freedom here since `v₀` can lie in different cones.
     # But once a cone is fixed, all the other roots appearing afterwards are uniquely defined.
@@ -188,8 +177,7 @@ function Vinberg_Algorithm(
 
     start = true
 
-    
-    for (round_num,new_root) in enumerate(new_roots_channel)
+    for (round_num,new_root) in enumerate(new_roots_iterator)
        
         # breaking if maximal number of rounds has been reached
         !isnothing(rounds) && rounds ≤ round_num && break 
