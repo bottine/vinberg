@@ -132,34 +132,19 @@ function get_integer_points(
 
     minimum = [sum([min(v,0) for v in M[i,:]]) for i in 1:n]
     maximum = [sum([max(v,0) for v in M[i,:]]) for i in 1:n]
-    
-    function parallelipiped_contains(v#=::SVector{rank,Int}=#)
+    interval = [collect(min:max) for (min,max) in zip(minimum,maximum)]
+
+    function parallelipiped_contains(v::SVector{rank,Int})
         Q = invM*v
         return all(c < 1 && c >= 0 for c in Q)
     end
-  
-    dtr = Int(abs(det(Rational{Int}.((M)))))
-    integer_points = Vector{SVector{n,Int}}(undef, dtr) 
-    v = copy(minimum)
-    i = 1
-    while v ≠ maximum # TODO maybe we should allow v=maximum and stop right after ?
-        if parallelipiped_contains(v) 
-            integer_points[i] = SVector{n,Int}(v)
-            i += 1
-        end
-        
-        idx = 1
-        while v[idx] == maximum[idx]
-            v[idx] = minimum[idx]
-            idx += 1
-        end
-        v[idx] += 1
-
-    end
     
-    @toggled_assert i-1 == dtr
+    bb = SVector{rank,Int}.(Base.product(interval...))
+    integer_points = [b for b in bb if parallelipiped_contains(b)] 
+    
+    dtr = Int(abs(det(Rational{Int}.((M)))))
     #integer_points = [v for v in bb if parallelipiped_contains(v)]
-    @toggled_assert length(integer_points) == abs(det(Rational{Int}.((M)))) "index = |determinant| = volume (I think)\n but have $(length(integer_points)) ≠ $(abs(det(Rational{Int}.(M))))"
+    @toggled_assert length(integer_points) == dtr "index = |determinant| = volume (I think)\n but have $(length(integer_points)) ≠ $(dtr)"
     # TODO is the discrete volume equal always?
 
     return integer_points
