@@ -242,7 +242,7 @@ function crystallographic_condition(v::HyperbolicLatticeElement,norm_v=nothing::
                         all(2*(e⊙v) % (v⊙v) == 0 for e in standard_basis(v.L)), 
                         all(2*(row⋅v.vec) % nv == 0 for row in eachrow(v.L.G))
                        ) "Optimized check for the crystallographic condition should be equivalent to the complete one."
-    return all((2*(col⋅v.vec)) % nv == 0 for col in eachcol(v.L.G))
+    return all( (((2*x) % nv) == 0)::Bool for x in v.L.G * v.vec )
 
 end
 
