@@ -190,7 +190,7 @@ function Vinberg_Algorithm(
                            ) "Precomputed products should be the same as non-precomputed ones."
         
         # Acute angle condition
-        if any(r_pp' * new_root.vec > 0 for r_pp in roots_pp)
+        if any( (r_pp' * new_root.vec > 0)::Bool for r_pp in roots_pp)
             @debug "It doesn't satisfy the acute angle condition; discarding it."
             continue
         end
