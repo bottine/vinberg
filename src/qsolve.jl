@@ -37,6 +37,7 @@ function qform_minimum(
     return (x, x ⋅ (A*x) + b ⋅ x + γ)
 end
 
+
 """
     solve_quadratic_poly(a,b,c)
 
@@ -161,3 +162,67 @@ function qsolve(
     end
 end
 
+
+function feasible(A,b,γ)
+
+    (min_point,min_val) = qform_minimum(A,b,γ)
+    
+    if min_val > 0.1 
+        return nothing
+    else
+        return min_point
+    end
+end
+
+function it_qsolve_iterative(A,b,γ)
+    x = feasible(A,b,γ)
+    x == nothing && return []
+    return it_qsolve_iterative(A,b,γ,x)
+end
+
+function it_qsolve_iterative(A::SMatrix{1,1,Int},b::SVector{1, Int},γ::Int,x) where {rank}
+    
+    a = A[1,1]
+    b = b[1]
+    return int_solve_quadratic_poly(a,b,γ)
+   
+end
+function it_qsolve_iterative(A::SMatrix{rank,rank,Int},b::SVector{rank, Int},γ::Int,x) where {rank}
+
+    @assert rank > 1 "Rank 1 case treated above"
+
+    sols::Vector{SVector{rank,Int}} = []
+
+
+    A_(y)::SMatrix{rank-1,rank-1,Int} = A[1:end-1,1:end-1]
+    b_(y)::SVector{rank-1,Int} = b[1:end-1] + y*A[end,1:end-1] + y*A[1:end-1,end]
+    γ_(y)::Int = A[end,end]*y^2 +b[end]*y + γ
+
+    y = floor(x[end])
+    
+    A_y,b_y,γ_y = A_(y),b_(y),γ_(y)
+    yb = feasible(A_y,b_y,γ_y)
+    while yb ≠ nothing
+        sols_y = it_qsolve_iterative(A_(y),b_(y),γ_(y),yb)
+        append!(sols,[vcat(sol,SVector{1,Int}(y)) for sol in sols_y])
+        y -= 1
+        A_y,b_y,γ_y = A_(y),b_(y),γ_(y)
+        yb = feasible(A_y,b_y,γ_y)
+    end
+    
+    y = floor(x[end])+1
+    A_y,b_y,γ_y = A_(y),b_(y),γ_(y)
+    yb = feasible(A_y,b_y,γ_y)
+    while yb ≠ nothing
+        sols_y = it_qsolve_iterative(A_(y),b_(y),γ_(y))
+        append!(sols,[vcat(sol,SVector{1,Int}(y)) for sol in sols_y])
+        y += 1
+        A_y,b_y,γ_y = A_(y),b_(y),γ_(y)
+        yb = feasible(A_y,b_y,γ_y)
+    end
+    
+    @toggled_assert length(Set(sols)) == length(sols) "We should have not solution appearing twice"
+    
+    return sols 
+
+end
