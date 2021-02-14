@@ -64,7 +64,6 @@ function test_suite(label=nothing;cache_behaviour=:empty_batched,log_location=no
     end
 
     if cache_behaviour == :empty_batched
-        empty!(memoize_cache(qsolve_iterative))
         empty!(memoize_cache(is_necessary_halfspace))
     end
 
@@ -90,7 +89,6 @@ function test_suite(label=nothing;cache_behaviour=:empty_batched,log_location=no
             
             if cache_behaviour == :empty_singles
                 println("emptying caches")
-                empty!(memoize_cache(qsolve_iterative))
                 empty!(memoize_cache(is_necessary_halfspace))
             end 
 

@@ -5,6 +5,7 @@ using AbstractAlgebra
 using Base
 using Memoize
 using ToggleableAsserts
+using LRUCache
 
 include("util.jl")
 
@@ -49,17 +50,20 @@ Return integers solutions of the quadratic poly, if real solutions exist, or not
         δ = Int(round(sqrt(Δ),digits=0)) # actually faster than isqrt( ) it seems
         if δ^2 == Δ
             if (-b-δ) % (2*a) == 0
-                push!(res,(-b-δ)//(2*a))
+                push!(res,Int((-b-δ)//(2*a)))
             end
             if δ≠0 && (-b+δ) % (2*a) == 0
-                push!(res,(-b+δ)//(2*a))
+                push!(res,Int((-b+δ)//(2*a)))
             end
         end
     else
         return nothing
     end
-    return res
+    return SVector{1,Int}.(res)
 end
+
+const max_cached_rank=3
+const qsolve_cache = [LRU{Tuple{SMatrix{i,i,Int},SVector{i,Int},Int},Union{Nothing,Vector{SVector{i,Int}}}}(maxsize=2^10*2^(2^(max_cached_rank-i))) for i in 1:max_cached_rank]
 
 """
     qsolve_iterative(A::SMatrix{rank,rank,Int},b::SVector{rank, Int},γ::Int)
@@ -84,8 +88,7 @@ Solve the positive definite problem ``x'Ax + b'x + γ = 0`` with integral soluti
 This method is pretty much entirely copied from B&P.
 **Important.** By convention, if no solutions (even real ones) exist for the equation, returns nothing, and not just an empty list. 
 """
-@memoize Dict function qsolve_iterative(A::SMatrix{rank,rank,Int},b::SVector{rank, Int},γ::Int
-) where {rank}
+function qsolve_iterative(A::SMatrix{rank,rank,Int},b::SVector{rank, Int},γ::Int) where {rank}
 
 
     @assert rank > 1 "Rank 1 case treated above"
@@ -106,24 +109,35 @@ This method is pretty much entirely copied from B&P.
     γ_(y)::Int = A[end,end]*y^2 +b[end]*y + γ
 
     y = x_floor
-    sols_y = qsolve_iterative(A_(y),b_(y),γ_(y))
+    sols_y = cached_qsolve_iterative(A_(y),b_(y),γ_(y))
     while sols_y ≠ nothing
         append!(sols,[vcat(sol,SVector{1,Int}(y)) for sol in sols_y])
         y -= 1
-        sols_y = qsolve_iterative(A_(y),b_(y),γ_(y))
+        sols_y = cached_qsolve_iterative(A_(y),b_(y),γ_(y))
     end
     
     y = x_ceil
-    sols_y = qsolve_iterative(A_(y),b_(y),γ_(y))
+    sols_y = cached_qsolve_iterative(A_(y),b_(y),γ_(y))
     while sols_y ≠ nothing
         append!(sols,[vcat(sol,SVector{1,Int}(y)) for sol in sols_y])
         y += 1
-        sols_y = qsolve_iterative(A_(y),b_(y),γ_(y))
+        sols_y = cached_qsolve_iterative(A_(y),b_(y),γ_(y))
     end
     
     @toggled_assert length(Set(sols)) == length(sols) "We should have not solution appearing twice"
     
     return sols 
+end
+
+
+function cached_qsolve_iterative(A::SMatrix{rank,rank,Int},b::SVector{rank, Int},γ::Int) where {rank}
+    if rank > max_cached_rank
+        return qsolve_iterative(A,b,γ)
+    else
+        return get!(qsolve_cache[rank],(A,b,γ)) do
+            qsolve_iterative(A,b,γ)
+        end
+    end
 end
 
 """
@@ -137,7 +151,9 @@ function qsolve(
     b::SVector{rank,Int},
     γ::Int
 ) where {rank}
-    res = qsolve_iterative(A,b,γ)
+    
+
+    res = cached_qsolve_iterative(A,b,γ)
     if res === nothing
         return []
     else 
