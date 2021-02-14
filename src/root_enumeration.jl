@@ -54,19 +54,24 @@ Furthermore, for a fixed pair ``(k,w)`` minimizing the distance amounts to minim
     (u⊙v₀)²/(u⊙u) = (a₀v₀⊙v₀ + v₀⊙w)²/k.
 ```
 The minimum of this function is attained at ``a = -v₀⊙w/v₀⊙v₀``, and its values increases with ``a`` getting farther from this minimum in both direction.
+The minimum is exactly achieved when ``v₀`` is in the halfspace defined by ``u``, and with ``a₀`` getting smaller, ``v₀`` gets in the negative halfspace, while with ``a₀`` getting bigger, ``v₀`` gets in the positive halfspace.
 
 It follows that for a given fixed pair ``(k,w)`` iterating over the possible ``a₀``s by increasing distance amounts to finding this minimum, and keeping track of both possible directions for ``a`` to go.
-Since the number of pairs ``(k,w)`` is finite, we simply keep, for each such pair, the two "iterators" ``a₋`` (decreasing from ``a₀``) and ``a₊`` (increasing).
+Since the number of pairs ``(k,w)`` is finite, we can simply keep, for each such pair, the two "iterators" ``a₋`` (decreasing from ``a₀``) and ``a₊`` (increasing).
+Note that if ``a₀`` is not an integer, we'll need to take the closest one, obviously.
+
+**SINCE** we only care about roots containing ``v₀`` in their **positive** halfspace, we can simply discard the ``a₋`` part, and only iterate over ``a₊``.
+That is, we iterate by distance to `v₀`, but only one "one side"
 """
 mutable struct RootDecompositionPatternsByDistance
     # The VinbergLattice in which we're working
     VL::VinbergLattice
-    # For each pair `(w,k)` the "iterators" a₋ and a₊
-    next_least_as_for_w_and_k::Union{
+    # For each pair `(w,k)` the "iterator" a₊
+    next_least_a_for_w_and_k::Union{
                                      Nothing,  # In case we haven't started iterating
                                      SortedDict{
                                                 Tuple{HyperbolicLatticeElement,Int} # Keys are (w,k)
-                                                ,Tuple{Int,Int}}}                   # Values are (a₋,a₊)
+                                                ,Int}}                   # Value is a₊
     # We also keep a copy of the current fake_dist, for verification purposes
     current_fake_dist::Union{Nothing,Rational{Int}}
 end
@@ -75,7 +80,7 @@ end
 Constructs an instance of `RootDecompositionPatternsByDistance` by iterating over pairs `(k,w)`, and for each such pair:
 
 * Finding the ``a₀`` (non-necessarily integer) attaining the minimum distance for the pair ``(k,w)``.
-* Taking its `ceil` and `floor` to define `a₊` and `a₋` respectively (the "iterators").
+* Taking its `ceil`to define `a₊`(the "iterator").
 """
 function RootDecompositionPatternsByDistance(VL::VinbergLattice)
     
@@ -87,29 +92,27 @@ function RootDecompositionPatternsByDistance(VL::VinbergLattice)
     # We can't just use `fake_dist(::Pattern,::VinbergLattice)` because we use it on `a₀`, not necessarily an integer.
     f_dist(k,w,a) = (a*VL.v₀_norm + (times_v₀(VL,w)))^2//k
 
-    next_least_as_for_w_and_k = SortedDict{Tuple{HyperbolicLatticeElement,Int},Tuple{Int,Int}}()
+    next_least_a_for_w_and_k = SortedDict{Tuple{HyperbolicLatticeElement,Int},Int}()
      
     for w in W, k in root_lengths(VL.L)
         # Find the minimal ``a₀``
         a₀::Rational{Int} = -times_v₀(VL,w)//VL.v₀_norm; 
         @toggled_assert -(w⊙v₀)//(v₀⊙v₀) == -times_v₀(VL,w)//VL.v₀_norm "The optimized computation should equal the full one."
         
-        # its integer approximations in both directions 
-        a₋::Int = floor(a₀)
+        # Its integer approximation in the positive direction 
         a₊::Int = ceil(a₀)
 
         # verify that they are actually not as good
-        @toggled_assert f_dist(k,w,a₋) ≥ f_dist(k,w,a₀)
         @toggled_assert f_dist(k,w,a₊) ≥ f_dist(k,w,a₀)
-        @debug "For (w=$w,k=$k), (a₋,a₀,a₊) is ($a₋,$a₀,$a₊) with values $((f_dist(k,w,a₋),f_dist(k,w,a₀),f_dist(k,w,a₊)))."
+        @debug "For (w=$w,k=$k), (a₀,a₊) is ($a₀,$a₊) with values $((f_dist(k,w,a₀),f_dist(k,w,a₊)))."
         
         # push the result
-        push!(next_least_as_for_w_and_k, (w,k) => (a₋,a₊))
+        push!(next_least_a_for_w_and_k, (w,k) => a₊)
     end
 
     current_fake_dist::Union{Nothing,Rational{Int}} = nothing
 
-    return RootDecompositionPatternsByDistance(VL,next_least_as_for_w_and_k,current_fake_dist)
+    return RootDecompositionPatternsByDistance(VL,next_least_a_for_w_and_k,current_fake_dist)
 
 
 end
@@ -123,9 +126,9 @@ Returns:
 * The distance.
 
 The function proceeds as follows:
-* Iterate over all `(w,k)`, and for each get the "iterators" `a₊,a₋`.
+* Iterate over all `(w,k)`, and for each get the "iterator" `a₊`.
 * Find the minimum distance over all those.
-* Collect the `Pattern`s `(w,k,a)` (with `a` either `a₊` or `a₋`) attaining this minimum
+* Collect the `Pattern`s `(w,k,a)` (with `a` equal to `a₊`) attaining this minimum
 * Return all of those, and the distance.
 """
 function next!(pats::RootDecompositionPatternsByDistance)::Tuple{Vector{RootDecompositionPattern},Rational{Int}}
@@ -139,13 +142,12 @@ function next!(pats::RootDecompositionPatternsByDistance)::Tuple{Vector{RootDeco
     # No min_val yet, no patterns either
     min_val = nothing
     min_patterns=Vector{Pattern}()
-    for  ((w,k),(a₋,a₊)) in pats.next_least_as_for_w_and_k
+    for  ((w,k),a₊) in pats.next_least_a_for_w_and_k
         
         # Verify that everything we see now is farther away than the previous fake_dist.
         @toggled_assert pats.current_fake_dist === nothing || f_dist(k,w,a₊) ≥ pats.current_fake_dist 
-        @toggled_assert pats.current_fake_dist === nothing || f_dist(k,w,a₋) ≥ pats.current_fake_dist 
       
-        # We first treat `a₊`, then `a₋`.
+        # We first treat `a₊`.
 
         # If `min_val` not set yet, or set but we are lower than it, push our pattern to `min_patterns`.
         # Note that `min_val === nothing` iff `min_patterns == []`.
@@ -157,35 +159,18 @@ function next!(pats::RootDecompositionPatternsByDistance)::Tuple{Vector{RootDeco
         elseif f_dist(k,w,a₊) == min_val
             push!(min_patterns,(k,w,a₊))
         end
-
-        # Same as for `a₊`
-        if min_val === nothing || f_dist(k,w,a₋) < min_val
-            min_patterns = Vector{Pattern}([(k,w,a₋)])
-            min_val = f_dist(k,w,a₋)
-        elseif f_dist(k,w,a₋) == min_val
-            # Here we differ from `a₊`:
-            # It may happen that a₋ == a₊ (only at the very beginning, i.e. distance zero from v₀).
-            # In this case, if a₊ has already been added, we shouldn't not add it again as `a₋`.
-            # So, we ensure that a₋ is not added if it was already added as a₊.
-            if isempty(min_patterns) || min_patterns[end] ≠ (k,w,a₋)
-                push!(min_patterns,(k,w,a₋))
-            end
-        end
     end
    
     # Store the new minimal distance.
     pats.current_fake_dist = min_val
 
-    # For each `a` appearing in a pattern, "discard it" by advancing the corresponding iterator `a₊` or `a⁻`.
+    # For each `a` appearing in a pattern, "discard it" by advancing the corresponding iterator `a₊` `.
     for (k,w,a) in min_patterns
-        (a₋,a₊) = pats.next_least_as_for_w_and_k[(w,k)]
+        a₊ = pats.next_least_a_for_w_and_k[(w,k)]
         if a₊ == a
             a₊ += 1
         end
-        if a₋ == a
-            a₋ -= 1
-        end
-        pats.next_least_as_for_w_and_k[(w,k)] = (a₋,a₊)
+        pats.next_least_a_for_w_and_k[(w,k)] = a₊
     end
     
     # Return the patterns, and their distance
