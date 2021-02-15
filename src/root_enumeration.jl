@@ -1,5 +1,5 @@
 using DataStructures
-
+using ResumableFunctions
 
 include("util.jl")
 include("qsolve.jl")
@@ -178,141 +178,6 @@ function next!(pats::RootDecompositionPatternsByDistance)::Tuple{Vector{RootDeco
 
 end
 
-"""
-    Allows iterating over roots by batches corresponding either to a common distance, or a common pattern.
-"""
-mutable struct BatchedRoots
-    # The pattern iterator
-    pats::RootDecompositionPatternsByDistance
-    # The patterns we have "in store"
-    current_patterns::Union{Nothing,Vector{Pattern}}
-end
-
-function BatchedRoots(VL::VinbergLattice)
-    pats = RootDecompositionPatternsByDistance(VL)
-    current_patterns = nothing
-    return BatchedRoots(pats,current_patterns)
-end
-
-"""
-    Returns the next batch of roots all, at the same (next least) distance.
-    It may be that the next least distance actually contains no root, in which case we return an empty `Vector`.
-"""
-function next_dist_batch!(br::BatchedRoots)
-    
-    VL = br.pats.VL
-    v₀ = VL.v₀
-    
-    # If there is no pattern in store:
-    if br.current_patterns === nothing || isempty(br.current_patterns)
-        # then, ask for the next ones from our `RootDecompositionPatternsByDistance`.
-        (br.current_patterns,dist) = next!(br.pats)
-    end
-    
-    # Find all roots corresponding to all patterns in store
-    roots_batches = [roots_decomposed_into(VL,a*v₀ + w,k) for (k,w,a) in br.current_patterns]
-    this_batch =  vcat(roots_batches...)
-
-    # Empty our pattern store
-    br.current_patterns = []
-    
-    # Ensure that the distances for our roots are what br.pats thinks they are
-    @toggled_assert all(fake_dist(VL,r) == br.pats.current_fake_dist for r in this_batch)
-   
-    return this_batch
-
-end
-
-"""
-    Returns the next batch of roots, all corresponding to the same (next least distance) pattern. 
-    It may be that the pattern actually contains no root, in which case we return an empty `Vector`.
-"""
-function next_pattern_batch!(br::BatchedRoots)
-
-    VL = br.pats.VL
-    v₀ = VL.v₀
-
-    # If there is no pattern in store:
-    if br.current_patterns === nothing || isempty(br.current_patterns)
-        # then, ask for the next ones from our `RootDecompositionPatternsByDistance`.
-        (br.current_patterns, dist) = next!(br.pats)
-    end
-    
-    # Pop the next pattern
-    (k,w,a) = pop!(br.current_patterns)
-    
-    # Find the corresponding roots
-    this_batch = roots_decomposed_into(VL,a*v₀ + w,k)
-    
-    # Ensure that the distances for our roots are what br.pats thinks they are
-    @toggled_assert all(fake_dist(VL,r) == br.pats.current_fake_dist for r in this_batch)
-    
-    return this_batch 
-
-end
-
-"""
-Allows iterating over roots (with increasing distance) with the following possibilities:
-
-* Either get all roots at distance zero (can only be done on a fresh instance)
-* Get one next root.
-* Get some "natural" batch (i.e. what `BatchedRoots` spits out with `next_pattern_batch!`).
-"""
-mutable struct RootsByDistance
-    # Batched roots iterator
-    br::BatchedRoots
-    # What roots we have asked `br` but haven spitted out ourselves yet (i.e. a buffer)
-    remaining::Vector{HyperbolicLatticeElement}
-    # Whether this is a fresh instance
-    fresh::Bool
-end
-
-function RootsByDistance(VL::VinbergLattice)
-    return RootsByDistance(BatchedRoots(VL),[],true)
-end
-
-"""
-    All roots at distance zero (that is, such that ``v₀`` is contained in the corresponding hyperplane).
-"""
-function next_at_distance_zero!(rbd::RootsByDistance) 
-    @toggled_assert rbd.fresh == true "Only allowed to get roots at distance zero on a fresh instance."
-    rbd.fresh = false
-
-    # Since this is a fresh instance, we haven't gotten anything yet from `rbd.br`, so that `next_dist_batch!` returns all roots at the next possible distance, that is those at distance zero.
-    return next_dist_batch!(rbd.br)
-end
-
-"""
-Some (non-empty) batch of roots.
-"""
-function next_batch!(rbd::RootsByDistance)
-    rbd.fresh = false
-    
-    # If nothing in our buffer, fill it again (and try as long as `next_pattern_batch` gives us nothing)
-    while isempty(rbd.remaining)
-        rbd.remaining = next_pattern_batch!(rbd.br)
-    end
-
-    # Return the content of rbd.remaining, and empty it.
-    batch = rbd.remaining
-    rbd.remaining = []
-    return batch
-end
-
-"""
-Exactly one root.
-"""
-function next!(rbd::RootsByDistance)
-    rbd.fresh = false
-    
-    # If nothing in our buffer, fill it again (and try as long as `next_pattern_batch` gives us nothing)
-    while isempty(rbd.remaining)
-        rbd.remaining = next_pattern_batch!(rbd.br)
-    end
-    
-    # The buffer is not empty: pop one root out of it.
-    return pop!(rbd.remaining)
-end
 
 """
     roots_decomposed_into(VL,a,k)
@@ -346,57 +211,51 @@ and now ``M₁'GM₁`` is positive definite (since ``V₁`` is the orthogonal co
 This results in a "positive definite" quadratic equation for ``b₁``, which we know how to solve. 
 It suffices then to transform back
 """
-function roots_decomposed_into(VL::VinbergLattice, a::HyperbolicLatticeElement, k::Int)
+function roots_decomposed_into(VL::VinbergLattice, a::HyperbolicLatticeElement, k::Int) end
+
+@resumable function roots_decomposed_into(
+    VL::VinbergLattice{r,r_minus_one}, 
+    a::HyperbolicLatticeElement{r}, 
+    k::Int
+)::HyperbolicLatticeElement{r} where {r,r_minus_one}
     
-    r = rk(VL.L)
     M₁ = VL.V₁_basis_matrix
     
     # Translate our problem into a positive definite quadratic equation, solvable by `qsolve()`
-    A::SMatrix{r-1,r-1,Int} = M₁' * VL.L.G * M₁
-    b::SVector{r-1,Int} = 2 *( M₁' * VL.L.G * a.vec)
-    γ::Int = a⊙a - k
+    A = M₁' * VL.L.G * M₁
+    b = 2 *( M₁' * VL.L.G * a.vec)
+    γ = a⊙a - k
+  
+
+    # Finds solutions, translate them back to the lattice
+    for u in res_qsolve(A,b,γ)
+        uu = HyperbolicLatticeElement(VL.L,M₁ * u + a.vec)
+        @toggled_assert norm(uu) == k  "``u⊙u`` must be equal to k"
+        @toggled_assert (uu-a)⊙VL.v₀ == 0 "``u-a`` must lie in `V₁`"
+        if is_root(uu,k)
+            @yield uu 
+        end
+    end
+
+end
+
+
+@resumable function roots_by_distance(
+    VinLat::VinbergLattice{r,r_minus_one}
+) :: HyperbolicLatticeElement{r} where {r,r_minus_one} 
     
-    # Finds solutions
-    solutions = qsolve(A, b, γ)
+    patterns = RootDecompositionPatternsByDistance(VinLat)
+    VinLat = patterns.VL
+    v₀ = VinLat.v₀
     
-    # Translate them back
-    #solutions_in_L::Array{HyperbolicLatticeElement,1} = (b -> VL.L(M₁ * b + a.vec)).(solutions) # This is prettier, but performance-wise horrible. TODO: investigate
-    solutions_in_L::Array{HyperbolicLatticeElement,1} = (b -> HyperbolicLatticeElement(VL.L,M₁ * b + a.vec)).(solutions)
-    @toggled_assert all(norm(u) == k for u in solutions_in_L) "``u⊙u`` must be equal to k"
-    @toggled_assert all((u-a)⊙VL.v₀ == 0 for u in solutions_in_L) "``u-a`` must lie in `V₁`"
-
-
-    # Filter to get roots only (we know that `k` is the norm of `u`, so feed it to `is_root` already)
-    return filter(u->is_root(u,k),solutions_in_L)
+    while true
+        
+        (current_patterns,dist) = next!(patterns)
+        for (k,w,a) in current_patterns
+            for root in roots_decomposed_into(VinLat,a*v₀ + w,k)
+                @toggled_assert fake_dist(VinLat,root) == patterns.current_fake_dist
+                @yield root
+            end
+        end
+    end
 end
-
-"""
-    iterate(r::RootsByDistance)
-
-Return the next root of `r` and nothing, and update `r` accordingly.
-
-# Warning
-
-I think normally the function `iterate` should not mutate the iterator but store the state elsewhere, which I am not doing!
-I'm implementing this method to make it possible to use a `for` loop to iterate over `r`
-"""
-function iterate(r::RootsByDistance)
-    root = next!(r)
-    return (root,nothing)
-end
-
-"""
-    iterate(r::RootsByDistancei,n::Nothing)
-
-Return the next root of `r` and nothing, and update `r` accordingly.
-
-# Warning
-
-I think normally the function `iterate` should not mutate the iterator but store the state elsewhere, which I am not doing!
-I'm implementing this method to make it possible to use a `for` loop to iterate over `r`
-"""
-function iterate(r::RootsByDistance,n::Nothing)
-    root = next!(r)
-    return (root,n)
-end
-
