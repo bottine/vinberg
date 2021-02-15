@@ -1,5 +1,5 @@
 using DataStructures
-
+using ResumableFunctions
 
 include("util.jl")
 include("qsolve.jl")
@@ -346,28 +346,32 @@ and now ``M₁'GM₁`` is positive definite (since ``V₁`` is the orthogonal co
 This results in a "positive definite" quadratic equation for ``b₁``, which we know how to solve. 
 It suffices then to transform back
 """
-function roots_decomposed_into(VL::VinbergLattice, a::HyperbolicLatticeElement, k::Int)
+function roots_decomposed_into(VL::VinbergLattice, a::HyperbolicLatticeElement, k::Int) end
+
+@resumable function roots_decomposed_into(
+    VL::VinbergLattice{r,r_minus_one}, 
+    a::HyperbolicLatticeElement{r}, 
+    k::Int
+)::HyperbolicLatticeElement{r} where {r,r_minus_one}
     
-    r = rk(VL.L)
     M₁ = VL.V₁_basis_matrix
     
     # Translate our problem into a positive definite quadratic equation, solvable by `qsolve()`
-    A::SMatrix{r-1,r-1,Int} = M₁' * VL.L.G * M₁
-    b::SVector{r-1,Int} = 2 *( M₁' * VL.L.G * a.vec)
-    γ::Int = a⊙a - k
-    
-    # Finds solutions
-    solutions = qsolve(A, b, γ)
-    
-    # Translate them back
-    #solutions_in_L::Array{HyperbolicLatticeElement,1} = (b -> VL.L(M₁ * b + a.vec)).(solutions) # This is prettier, but performance-wise horrible. TODO: investigate
-    solutions_in_L::Array{HyperbolicLatticeElement,1} = (b -> HyperbolicLatticeElement(VL.L,M₁ * b + a.vec)).(solutions)
-    @toggled_assert all(norm(u) == k for u in solutions_in_L) "``u⊙u`` must be equal to k"
-    @toggled_assert all((u-a)⊙VL.v₀ == 0 for u in solutions_in_L) "``u-a`` must lie in `V₁`"
+    A = M₁' * VL.L.G * M₁
+    b = 2 *( M₁' * VL.L.G * a.vec)
+    γ = a⊙a - k
+  
 
+    # Finds solutions, translate them back to the lattice
+    for u in res_qsolve(A,b,γ)
+        uu = HyperbolicLatticeElement(VL.L,M₁ * u + a.vec)
+        @toggled_assert norm(uu) == k  "``u⊙u`` must be equal to k"
+        @toggled_assert (uu-a)⊙VL.v₀ == 0 "``u-a`` must lie in `V₁`"
+        if is_root(uu,k)
+            @yield uu 
+        end
+    end
 
-    # Filter to get roots only (we know that `k` is the norm of `u`, so feed it to `is_root` already)
-    return filter(u->is_root(u,k),solutions_in_L)
 end
 
 """
@@ -400,3 +404,22 @@ function iterate(r::RootsByDistance,n::Nothing)
     return (root,n)
 end
 
+@resumable function roots_by_distance(
+    VinLat::VinbergLattice{r,r_minus_one}
+) :: HyperbolicLatticeElement{r} where {r,r_minus_one} 
+    
+    patterns = RootDecompositionPatternsByDistance(VinLat)
+    VinLat = patterns.VL
+    v₀ = VinLat.v₀
+    
+    while true
+        
+        (current_patterns,dist) = next!(patterns)
+        for (k,w,a) in current_patterns
+            for root in roots_decomposed_into(VinLat,a*v₀ + w,k)
+                @toggled_assert fake_dist(VinLat,root) == patterns.current_fake_dist
+                @yield root
+            end
+        end
+    end
+end

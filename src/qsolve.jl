@@ -6,6 +6,7 @@ using Base
 using Memoize
 using ToggleableAsserts
 using LRUCache
+using ResumableFunctions
 
 include("util.jl")
 
@@ -18,7 +19,7 @@ function qform_minimum(
     A::SMatrix{rank,rank,Int},
     b::SVector{rank,Int},
     γ::Int
-) where {rank}
+   )::Tuple{SVector{rank,Float64},Float64} where {rank}
 
     minushalf_b = -b//2
     
@@ -60,7 +61,7 @@ Return integers solutions of the quadratic poly, if real solutions exist, or not
     else
         return nothing
     end
-    return SVector{1,Int}.(res)
+    return res
 end
 
 const max_cached_rank=3
@@ -163,66 +164,97 @@ function qsolve(
 end
 
 
-function feasible(A,b,γ)
+function feasible(    
+    A::SMatrix{rk,rk,Int},
+    b::SVector{rk, Int},
+    γ::Int,
+)::Union{Nothing,SVector{rk,Float64}} where {rk}
 
     (min_point,min_val) = qform_minimum(A,b,γ)
     
     if min_val > 0.1 
         return nothing
     else
-        return min_point
+        return min_point::SVector{rk,Float64}
     end
 end
 
-function it_qsolve_iterative(A,b,γ)
+@resumable function res_qsolve(
+    A::SMatrix{dim,dim,Int},
+    b::SVector{dim, Int},
+    γ::Int,
+)::SVector{dim,Int}  where {dim}
     x = feasible(A,b,γ)
-    x == nothing && return []
-    return it_qsolve_iterative(A,b,γ,x)
+    if ! isnothing(x) 
+        for r in res_qsolve_iterative(A,b,γ,x)
+            @yield r
+        end
+    end
 end
 
-function it_qsolve_iterative(A::SMatrix{1,1,Int},b::SVector{1, Int},γ::Int,x) where {rank}
-    
-    a = A[1,1]
-    b = b[1]
-    return int_solve_quadratic_poly(a,b,γ)
-   
+
+function sub_A_b_γ(
+    A::SMatrix{rk,rk,Int},
+    b::SVector{rk, Int},
+    γ::Int,
+    z::Int,
+) where {rk}
+    return (
+        SMatrix{rk-1,rk-1,Int}(A[1:rk-1,1:rk-1]),
+        SVector{rk-1,Int}(b[1:rk-1] + z*A[rk,1:rk-1] + z*A[1:rk-1,rk]),
+        (A[rk,rk]*z^2 +b[rk]*z + γ)::Int,
+    )
 end
-function it_qsolve_iterative(A::SMatrix{rank,rank,Int},b::SVector{rank, Int},γ::Int,x) where {rank}
 
-    @assert rank > 1 "Rank 1 case treated above"
+@resumable function res_qsolve_iterative(
+    A::SMatrix{dim,dim,Int},
+    b::SVector{dim, Int},
+    γ::Int,
+    x::SVector{dim, Float64},
+):: SVector{dim,Int}  where {dim}
 
-    sols::Vector{SVector{rank,Int}} = []
 
 
-    A_(y)::SMatrix{rank-1,rank-1,Int} = A[1:end-1,1:end-1]
-    b_(y)::SVector{rank-1,Int} = b[1:end-1] + y*A[end,1:end-1] + y*A[1:end-1,end]
-    γ_(y)::Int = A[end,end]*y^2 +b[end]*y + γ
+    if dim == 1
+        res = int_solve_quadratic_poly(A[1,1],b[1],γ)
+        if res === nothing
+            @yield nothing
+        end
+        for r in res
+            @yield SVector{1,Int}(r)
+        end
+        return 
+    end
 
-    y = floor(x[end])
+    @assert dim > 1 "Rank 1 case treated above"
+    y = Int(floor(x[dim]))
     
-    A_y,b_y,γ_y = A_(y),b_(y),γ_(y)
-    yb = feasible(A_y,b_y,γ_y)
+    Aspecy,bspecy,γspecy = sub_A_b_γ(A,b,γ,y)
+    yb = feasible(Aspecy,bspecy,γspecy)
+
     while yb ≠ nothing
-        sols_y = it_qsolve_iterative(A_(y),b_(y),γ_(y),yb)
-        append!(sols,[vcat(sol,SVector{1,Int}(y)) for sol in sols_y])
+        
+        for sol_y in res_qsolve_iterative(Aspecy,bspecy,γspecy,yb)
+            @yield vcat(sol_y,SVector{1,Int}(y))
+        end
         y -= 1
-        A_y,b_y,γ_y = A_(y),b_(y),γ_(y)
-        yb = feasible(A_y,b_y,γ_y)
+        Aspecy,bspecy,γspecy = sub_A_b_γ(A,b,γ,y)
+        yb = feasible(Aspecy,bspecy,γspecy)
     end
     
-    y = floor(x[end])+1
-    A_y,b_y,γ_y = A_(y),b_(y),γ_(y)
-    yb = feasible(A_y,b_y,γ_y)
+    y = Int(floor(x[dim])+1)
+
+    Aspecy,bspecy,γspecy = sub_A_b_γ(A,b,γ,y)
+    yb = feasible(Aspecy,bspecy,γspecy)
+    
     while yb ≠ nothing
-        sols_y = it_qsolve_iterative(A_(y),b_(y),γ_(y))
-        append!(sols,[vcat(sol,SVector{1,Int}(y)) for sol in sols_y])
+
+        for sol_y in res_qsolve_iterative(Aspecy,bspecy,γspecy,yb)
+            @yield vcat(sol_y,SVector{1,Int}(y))
+        end
         y += 1
-        A_y,b_y,γ_y = A_(y),b_(y),γ_(y)
-        yb = feasible(A_y,b_y,γ_y)
+        Aspecy,bspecy,γspecy = sub_A_b_γ(A,b,γ,y)
+        yb = feasible(Aspecy,bspecy,γspecy)
     end
-    
-    @toggled_assert length(Set(sols)) == length(sols) "We should have not solution appearing twice"
-    
-    return sols 
 
 end

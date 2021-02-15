@@ -1,6 +1,5 @@
 
 include("util.jl")
-include("qsolve.jl")
 include("diagrams.jl")
 include("hyperbolic_lattices.jl")
 include("root_enumeration.jl")
@@ -79,7 +78,7 @@ function roots_of_fundamental_cone(
     # Store the candidate roots, and their partial product with G, for efficiency's sake, hopefully ("pp" stands for "partial product")
     candidate_roots = roots_at_distance_zero
     candidate_roots_pp = [VL.L.G * r.vec for r in candidate_roots]
-    @info "Found candidate roots for fundamental cone (numbering $(length(candidate_roots)))."
+    @info "Starting with $(length(candidate_roots)) candidate roots (at distance zero) for fundamental cone."
 
     # Start with an empty set of roots (and corresponding partial products) in the cone.
     cone_roots::Vector{HyperbolicLatticeElement} = Vector()
@@ -115,7 +114,7 @@ function roots_of_fundamental_cone(
     end
     
     (cone_roots,cone_roots_pp) = drop_redundant_halfspaces(cone_roots, cone_roots_pp)
-    @info "Returning cone roots, numbering $(length(cone_roots))."
+    @info "Returning $(length(cone_roots)) cone roots."
     return (cone_roots, cone_roots_pp)
 
 end
@@ -154,13 +153,21 @@ function Vinberg_Algorithm(
     G = VL.L.G
     n = rk(VL.L)
     
-    # initiate our root enumeration object
-    new_roots_iterator = RootsByDistance(VL)
+    new_roots_iterator = roots_by_distance(VL)
     @info "Initialized root iterator."
 
-    # get all roots at distance zero (corresponding to hyperplanes containing `v₀`)
-    roots_at_distance_zero::Vector{HyperbolicLatticeElement} = next_at_distance_zero!(new_roots_iterator)
-    # and sort them (this is not necessary for the algorithm, but ensures a level of predictability in the output)
+    roots_at_distance_zero = Vector{HyperbolicLatticeElement}()
+
+    # Getting next (actually the first!) root
+    new_root = new_roots_iterator()
+    while fake_dist(VL,new_root) == 0
+        push!(roots_at_distance_zero,new_root)
+        new_root = new_roots_iterator()
+    end
+    # All roots at distance zero have now been considered
+    # `new_root` is now the first root not at distance zero
+    
+    # Sort the roots, so as to have a predictable choice of fundamental cone
     sort!(roots_at_distance_zero)
     @info "Got all roots at distance zero."
     
@@ -175,12 +182,10 @@ function Vinberg_Algorithm(
     diagram = build_diagram_and_subs(Coxeter_matrix,n-1)
     @info "Built the corresponding Coxeter diagram."
 
-    start = true
-
-    for (round_num,new_root) in enumerate(new_roots_iterator)
-       
-        # breaking if maximal number of rounds has been reached
-        !isnothing(rounds) && rounds ≤ round_num && break 
+    round_num = 0 
+    while isnothing(rounds) || round_num < rounds
+        
+        round_num += 1
 
         @debug "Trying new root $new_root."
         
@@ -189,36 +194,39 @@ function Vinberg_Algorithm(
                             (all((new_root⊙r) ≤ 0 for r in roots) && VL.v₀ ⊙ new_root < 0)
                            ) "Precomputed products should be the same as non-precomputed ones."
         
-        # Acute angle condition
         if any( (r_pp' * new_root.vec > 0)::Bool for r_pp in roots_pp)
+            # Acute angle condition ?
             @debug "It doesn't satisfy the acute angle condition; discarding it."
-            continue
-        end
-
-        # v₀ on the correct side of the halfspace
-        if times_v₀(VL,new_root) ≥ 0
+        
+        elseif times_v₀(VL,new_root) ≥ 0
+            # v₀ on the correct side of the halfspace ?
             @debug "The corresponding halfspace doesn't contain v₀; discarding it."
-            continue
+        
+        else
+            
+            # new_root now satisfies all the requirements to be added to our set of roots.
+            new_root_pp = G*new_root.vec
+            extend!(diagram,[Coxeter_coeff(r,new_root) for r in roots])
+            push!(roots,new_root)
+            push!(roots_pp,new_root_pp)
+
+
+            @info "Found new satisfying root: $new_root."
+            if is_finite_volume(diagram)
+                @info "And the diagram has finite volume."
+                break
+            end
+
         end
        
-        # new_root now satisfies all the requirements to be added to our set of roots.
-        new_root_pp = G*new_root.vec
-        extend!(diagram,[Coxeter_coeff(r,new_root) for r in roots])
-        push!(roots,new_root)
-        push!(roots_pp,new_root_pp)
-
-
-        @info "Found new satisfying root: $new_root."
-        if is_finite_volume(diagram)
-            @info "And the diagram has finite volume."
-            break
-        end
+        # Getting the next root
+        new_root = new_roots_iterator() 
 
     end
    
     println("Decision ($(rounds)) :", is_finite_volume(diagram))
     @toggled_assert length(roots) == length(drop_redundant_halfspaces(roots,roots_pp)[1])
-    return [r.vec for r in roots]
+    return sort([r.vec for r in roots])
 
 end
 

@@ -101,11 +101,17 @@ function test_suite(label=nothing;cache_behaviour=:empty_batched,log_location=no
                 push!(time_history, label => my_time)
             end
 
-            if my_roots ≠ roots
-                println("$(length(my_roots)) vs $(length(roots))")
-                display([(r, fake_dist(VL, VL.L(r))) for r in my_roots])
+            myr = [(fake_dist(VL, VL.L(r)),r) for r in my_roots]
+            ofr = [(fake_dist(VL, VL.L(r)),r) for r in roots]
+
+            sort!(myr)
+            sort!(ofr)
+
+            if myr ≠ ofr
+                println("$(myr) vs $(ofr)")
+                display(myr)
                 println("vs")
-                display([(r, fake_dist(VL, VL.L(SVector{rk(VL.L)}(r)))) for r in roots])
+                display(ofr)
                 @assert false
             end
 
