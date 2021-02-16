@@ -1,3 +1,4 @@
+using IterTools
 
 include("util.jl")
 include("diagrams.jl")
@@ -152,17 +153,16 @@ function Vinberg_Algorithm(
     v₀ = VL.v₀
     G = VL.L.G
     n = rk(VL.L)
-    
+   
+    # We make our iterator peekable so that we can look at the next root without consuming it: 
     new_roots_iterator = roots_by_distance(VL)
     @info "Initialized root iterator."
 
     roots_at_distance_zero = Vector{HyperbolicLatticeElement}()
 
     # Getting next (actually the first!) root
-    new_root = new_roots_iterator()
-    while fake_dist(VL,new_root) == 0
+    while fake_dist(VL,(local new_root=new_roots_iterator())) == 0
         push!(roots_at_distance_zero,new_root)
-        new_root = new_roots_iterator()
     end
     # All roots at distance zero have now been considered
     # `new_root` is now the first root not at distance zero
@@ -176,15 +176,18 @@ function Vinberg_Algorithm(
     # But once a cone is fixed, all the other roots appearing afterwards are uniquely defined.
     (roots, roots_pp) = roots_of_fundamental_cone(VL,roots_at_distance_zero)
     @info "Got the roots of a fundamental cone."
-
+    for r in roots
+        @info "                         : $r."
+    end
     # Construct the corresponding `DiagramAndSubs` object containing all subdiagrams of the Coxeter diagram defined by the roots
     Coxeter_matrix = reduce(hcat,[[Coxeter_coeff(r₁,r₂) for r₁ in roots] for r₂ in roots])
     diagram = build_diagram_and_subs(Coxeter_matrix,n-1)
     @info "Built the corresponding Coxeter diagram."
 
     round_num = 0 
-    while isnothing(rounds) || round_num < rounds
-        
+    for new_root in Iterators.flatten([[new_root],new_roots_iterator]) 
+
+        !isnothing(rounds) && round_num ≥ rounds && break 
         round_num += 1
 
         @debug "Trying new root $new_root."
@@ -199,6 +202,8 @@ function Vinberg_Algorithm(
             @debug "It doesn't satisfy the acute angle condition; discarding it."
         
         elseif times_v₀(VL,new_root) ≥ 0
+            # Normally, the way the code is written now makes it so that this condition is always satisfied: we only get roots containing v₀ in their correct halfspace
+
             # v₀ on the correct side of the halfspace ?
             @debug "The corresponding halfspace doesn't contain v₀; discarding it."
         
@@ -219,9 +224,6 @@ function Vinberg_Algorithm(
 
         end
        
-        # Getting the next root
-        new_root = new_roots_iterator() 
-
     end
    
     println("Decision ($(rounds)) :", is_finite_volume(diagram))

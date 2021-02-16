@@ -63,7 +63,7 @@ Return integers solutions of the quadratic poly, if real solutions exist, or not
 end
 
 const max_cached_rk=2
-const cache_sizes = [100000000,1000000000]
+const cache_sizes = [100000000,100000000]
 const qsolve_cache = [LRU{Tuple{SMatrix{i,i,Int},SVector{i,Int},Int,SVector{i,Float64}},Vector{SVector{i,Int}}}(maxsize=cache_sizes[i]) for i in 1:max_cached_rk]
 
 """
