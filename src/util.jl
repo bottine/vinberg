@@ -1,6 +1,6 @@
 ## Copied from qsolve.py
 
-using Convex, Cbc
+using Convex, Cbc, COSMO
 using LinearAlgebra
 using Base
 using MathOptInterface
@@ -160,7 +160,8 @@ end
     # x' * (A * r) ≤ 0 ∀ r
     # (A * r)' * x ≤ 0 ∀ r
 
-    x = Variable(n, IntVar)
+    #x = Variable(n, IntVar)
+    x = Variable(n)
     p = satisfy()       # satisfiability question 
     for cone_root in cone_roots
         p.constraints += x' * cone_root ≤ 0 # hyperplanes defining the cone
@@ -169,7 +170,8 @@ end
     # it should only be strictly bigger than zero, but Convex.jl does not do "strictly", so we change it to ≥ 1 (and since we have a cone, it should be the same result)
 
     
-    solve!(p,Cbc.Optimizer(verbose=0,loglevel=0), verbose=false, warmstart=false)
+    #solve!(p,Cbc.Optimizer(verbose=0,loglevel=0), verbose=false, warmstart=false)
+    solve!(p,COSMO.Optimizer(verbose=false), verbose=false)
    
 
     if p.status == MathOptInterface.INFEASIBLE 

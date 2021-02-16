@@ -172,7 +172,6 @@ function next!(pats::RootDecompositionPatternsByDistance)::Tuple{Vector{RootDeco
         end
         pats.next_least_a_for_w_and_k[(w,k)] = a₊
     end
-    
     # Return the patterns, and their distance
     return (min_patterns,min_val)
 
@@ -218,7 +217,8 @@ function roots_decomposed_into(VL::VinbergLattice, a::HyperbolicLatticeElement, 
     a::HyperbolicLatticeElement{r}, 
     k::Int
 )::HyperbolicLatticeElement{r} where {r,r_minus_one}
-    
+
+
     M₁ = VL.V₁_basis_matrix
     
     # Translate our problem into a positive definite quadratic equation, solvable by `qsolve()`
