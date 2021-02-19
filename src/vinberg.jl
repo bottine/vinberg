@@ -92,8 +92,8 @@ function test_suite(label=nothing;cache_behaviour=:empty_batched,log_location=no
                 empty!(memoize_cache(is_necessary_halfspace))
             end 
 
-            my_roots, my_time = @timed Vinberg_Algorithm(VinbergLattice(G, v₀_vec=v₀_vec))
-            VL = VinbergLattice(G, v₀_vec=v₀_vec)
+            my_roots, my_time = @timed Vinberg_Algorithm(VinbergLattice(G))
+            VL = VinbergLattice(G)
             v₀_vec = VL.v₀.vec
             
              
@@ -112,7 +112,7 @@ function test_suite(label=nothing;cache_behaviour=:empty_batched,log_location=no
                 display(myr)
                 println("vs")
                 display(ofr)
-                @assert false
+                @assert length(myr) == length(ofr)
             end
 
             println("Time change ratio (in %):                                   ", round(100 * my_time / time, digits=1))

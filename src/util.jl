@@ -148,9 +148,60 @@ function get_integer_points(
     # TODO is the discrete volume equal always?
 
     return integer_points
-
 end
 
+function get_integer_points_with_coordinates(
+    M::SMatrix{rank,rank,Int},
+    absdet::Int
+)::Tuple{
+        SVector{absdet,SVector{rank,Int}},
+        SVector{absdet,SVector{rank,Rational{Int}}},
+    } where {rank}
+  
+
+
+    n = size(M,1)
+    
+    @toggled_assert (n,n) == size(M) "Matrix should be square (and invertible)"
+    @toggled_assert abs(det(Rational{Int}.(M))) == absdet
+    @toggled_assert absdet ≠ 0 "Matrix should be square (and invertible)"
+    
+    invM = inv(Rational{Int}.(M)) 
+
+    minimum = [sum([min(v,0) for v in M[i,:]]) for i in 1:n]
+    maximum = [sum([max(v,0) for v in M[i,:]]) for i in 1:n]
+    interval = [collect(min:max) for (min,max) in zip(minimum,maximum)]
+
+    function parallelipiped_contains(v::SVector{rank,Int})
+        coordinates = invM*v
+        if all(c < 1 && c >= 0 for c in coordinates) 
+            return coordinates
+        else
+            return nothing
+        end
+    end
+    
+    bb = SVector{rank,Int}.(Base.product(interval...))
+    integer_points = MVector{absdet,SVector{rank,Int}}(undef);
+    integer_points_coordinates = MVector{absdet,SVector{rank,Rational{Int}}}(undef);
+    idx = 1
+    for b in bb
+        c = parallelipiped_contains(b)
+        if !isnothing(c)
+            integer_points[idx] = b
+            integer_points_coordinates[idx] = c
+            idx+=1
+        end
+        if idx == absdet+1
+            break
+        end
+    end
+    
+    #integer_points = [v for v in bb if parallelipiped_contains(v)]
+    #@toggled_assert idx == absdet+1 "index = |determinant| = volume (I think)"
+
+    return SVector(integer_points),SVector(integer_points_coordinates)
+end
 
 @memoize Dict function is_necessary_halfspace(cone_roots::Vector{SVector{rank,Int}},root::SVector{rank,Int}) where {rank}
 

@@ -326,6 +326,7 @@ struct VinbergLattice{rank,rank_minus_1}
 
     # The representatives for `⟨v₀⟩⊕V₁` 
     W::Vector{HyperbolicLatticeElement{rank}}
+    W_coordinates::Vector{SVector{rank,Rational{Int}}}
 
     # Precomputations
     v₀_vec_times_G::SVector{rank,Int} # used to hopefully make computations of the form v₀⊙something faster
@@ -349,35 +350,42 @@ end
 """
     VinbergLattice(G[;v₀_vec])
 
-Construct a `VinbergLattice`, with an optional negative norm vector `v₀`.
-If none is provided, one is found by diagonalizing the form.
+Construct a `VinbergLattice`.
 """
-function VinbergLattice(G::Array{Int,2};v₀_vec::Union{Array{Int,1},Nothing}=nothing)
+function VinbergLattice(G::Array{Int,2})
    
     assert_sig_n_1_matrix(G)
     
     rk = size(G)[1]
-
     L = HyperbolicLattice(G)
-    v₀ = (v₀_vec == nothing ? negative_vector(L) : HyperbolicLatticeElement(L,SVector{rk,Int}(v₀_vec)))
+
+    @assert L.P'*L.G*L.P == diagm(L.D)
+    neg_index = [i for i in 1:rk if L.D[i] < 0][1]
+    V₁_basis_matrix = if neg_index == 1
+        SMatrix{rk,rk-1,Int}(L.P[:,neg_index+1:end])
+        elseif neg_index == rk
+            SMatrix{rk,rk-1,Int}(L.P[:,1:neg_index-1])
+        else
+            SMatrix{rk,rk-1,Int}(hcat(L.P[:,1:neg_index-1],L.P[:,neg_index+1:end]))
+        end
+        v₀ = L(SVector{rk,Int}(L.P[:,neg_index]))
     
     @toggled_assert norm(v₀) < 0 "v₀ needs to have negative norm"
     
-    # Compute a matrix whose columns form a basis of `V₁`
-    V₁_basis_matrix = SMatrix{rk,rk-1,Int}(matrix_basis_of_orthogonal_complement(v₀))
 
     # Computes a matrix `M` whose columns are the basis of `V₁` computed before, plus `v₀`
-    M = hcat(v₀.vec,V₁_basis_matrix)
-    sM = SMatrix{rk,rk}(M)
-   
+    sM = SMatrix{rk,rk}(L.P)
+  
+    absdetM = Int(abs(det(Rational{Int}.(sM))))
+
     # Compute the representatives of `⟨v₀⟩⊕V₁`
-    W = get_integer_points(M)
-    W = (x -> HyperbolicLatticeElement(L,SVector{rk,Int}(x))).(W)
+    W_,W_coordinates = get_integer_points_with_coordinates(sM,absdetM)
+    W = (x -> HyperbolicLatticeElement(L,SVector{rk,Int}(x))).(W_)
   
     v₀_norm = norm(v₀)
 
-    @toggled_assert length(W) == abs(det(Rational{Int}.(M))) "The number of representative, i.e. the index of the sublattice must be the same as the determinant of the matrix whose columns are a basis for the sublattice.\n Here we have $(length(W)) ≠ $(abs(det(Rational{Int}.(M))))"
-    @toggled_assert v₀_norm % length(W) == 0 "According to B&P, the norm of v₀ must divide the index of the sublattice"
+    @toggled_assert length(W) == absdetM  "The number of representative, i.e. the index of the sublattice must be the same as the determinant of the matrix whose columns are a basis for the sublattice.\n Here we have $(length(W)) ≠ $(absdetM)"
+    #@toggled_assert v₀_norm % length(W) == 0 "According to B&P, the norm of v₀ must divide the index of the sublattice"
    
     v₀_vec_times_G = SVector{rk,Int}(v₀.vec' *  G)
 
@@ -386,7 +394,7 @@ function VinbergLattice(G::Array{Int,2};v₀_vec::Union{Array{Int,1},Nothing}=no
     @info "V₁_basis_matrix is $V₁_basis_matrix"
     @info "W is $W"
 
-    return VinbergLattice(L,v₀,V₁_basis_matrix,W,v₀_vec_times_G,v₀_norm)   
+    return VinbergLattice(L,v₀,V₁_basis_matrix,Vector(W),Vector(W_coordinates),v₀_vec_times_G,v₀_norm)   
 end
 
 function Base.convert(v::HyperbolicLatticeElement) 

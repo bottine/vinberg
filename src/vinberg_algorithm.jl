@@ -120,25 +120,6 @@ function roots_of_fundamental_cone(
 
 end
 
-
-"""
-    Vinberg_Algorithm(G [,v₀vec,rounds])
-
-Run the Vinberg for `rounds` rounds (or indefinitely if `isnothing(rounds)`) 
-
-* on the lattice given by the quadratic form `G`,
-* with basepoint given by `v₀vec` (or chosen by diagonalization if `isnothing(v₀vec)`).
-"""
-function Vinberg_Algorithm(
-    G::Array{Int,2};
-    v₀_vec::Union{Array{Int,1},Nothing}=nothing,
-    rounds=nothing
-)
-    VL = VinbergLattice(G;v₀_vec=v₀_vec)
-    return Vinberg_Algorithm(VL;rounds=rounds)
-end
-
-
 """
     Vinberg_Algorithm(VL::VinbergLattice[;rounds=nothing])
 

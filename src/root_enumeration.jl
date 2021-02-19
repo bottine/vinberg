@@ -240,6 +240,8 @@ function roots_decomposed_into(VL::VinbergLattice, a::HyperbolicLatticeElement, 
 end
 
 
+
+
 @resumable function roots_by_distance(
     VinLat::VinbergLattice{r,r_minus_one}
 ) :: HyperbolicLatticeElement{r} where {r,r_minus_one} 
