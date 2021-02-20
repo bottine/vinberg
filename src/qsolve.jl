@@ -78,6 +78,7 @@ function qsolve_iterative(
     b::SVector{1, Int},
     γ::Int,
     x::SVector{1, Float64},
+    constraints
 ) where {rk}
     
     a = A[1,1]
@@ -97,6 +98,7 @@ function qsolve_iterative(
     b::SVector{rk, Int},
     γ::Int,
     x::SVector{rk, Float64},
+    constraints
 ) where {rk}
 
 
@@ -133,7 +135,7 @@ function qsolve_iterative(
 end
 
 
-function cached_qsolve_iterative(A::SMatrix{rk,rk,Int},b::SVector{rk, Int},γ::Int,x) where {rk}
+function cached_qsolve_iterative(A::SMatrix{rk,rk,Int},b::SVector{rk, Int},γ::Int,x,constraints) where {rk}
     if rk > max_cached_rk
         return qsolve_iterative(A,b,γ,x)
     else
@@ -152,7 +154,8 @@ The construction of `qsolve_iterative` is such that it can either return `nothin
 function qsolve(
     A::SMatrix{rk,rk,Int},
     b::SVector{rk,Int},
-    γ::Int
+    γ::Int,
+    constraints
 ) where {rk}
     
 
@@ -185,10 +188,11 @@ end
     A::SMatrix{rk,rk,Int},
     b::SVector{rk, Int},
     γ::Int,
+    constraints::Vector{Vector{Tuple{SVector{rk,Int},Bool,Rational{Int}}}}
 )::SVector{rk,Int}  where {rk}
     x = feasible(A,b,γ)
     if ! isnothing(x) 
-        for r in res_qsolve_iterative(A,b,γ,x)
+        for r in res_qsolve_iterative(A,b,γ,x,constraints)
             @yield r
         end
     end
@@ -208,11 +212,40 @@ function sub_A_b_γ(
     )
 end
 
+struct Constraint{rk}
+    coefficients::SVector{rk,Int}
+    sign::Bool
+    value::Rational{Int}
+end
+
+function sub_one_constraint(
+    c::Constraint{rk},
+    y::Int,
+)::Constraint{rk-1} where {rk}
+    (coeff, ineq, val) = (c.coefficients,c.sign,c.value)
+    c_y = coeff[1]
+    rest = pop(coeff)
+    return Constraint(rest, ineq, val - c_y * y)
+end
+
+function sub_constraints(
+    constraints,
+    y,
+)
+    return [map(c->sub_one_constraint(c,y),cons) for cons in constraints]
+end
+
+function constraint_satisfied(constraint)
+    @toggled_assert length(constraint.coefficients) == 0
+    return (sign == true && value ≥ 0) || (sign == false && value ≤ 0)
+end
+
 @resumable function res_qsolve_iterative(
     A::SMatrix{rk,rk,Int},
     b::SVector{rk, Int},
     γ::Int,
     x::SVector{rk, Float64},
+    constraints
 ):: SVector{rk,Int}  where {rk}
 
     lower_qsolve = rk-1 ≤ max_cached_rk ? cached_qsolve_iterative : res_qsolve_iterative
@@ -236,8 +269,11 @@ end
 
     while yb ≠ nothing
         
-        for sol_y in lower_qsolve(Aspecy,bspecy,γspecy,yb)
-            @yield vcat(sol_y,SVector{1,Int}(y))
+        constraints_y = sub_constraints(y)
+        if all(constraint_satisfied(c) for c in constraints_y[0])
+            for sol_y in lower_qsolve(Aspecy,bspecy,γspecy,yb,constraints_y[1:])
+                @yield vcat(sol_y,SVector{1,Int}(y))
+            end
         end
         y -= 1
         Aspecy,bspecy,γspecy = sub_A_b_γ(A,b,γ,y)
@@ -250,9 +286,10 @@ end
     yb = feasible(Aspecy,bspecy,γspecy)
     
     while yb ≠ nothing
-
-        for sol_y in lower_qsolve(Aspecy,bspecy,γspecy,yb)
-            @yield vcat(sol_y,SVector{1,Int}(y))
+        if all(constraint_satisfied(c) for c in constraints_y[0])
+            for sol_y in lower_qsolve(Aspecy,bspecy,γspecy,yb,constraints_y[1:])
+                @yield vcat(sol_y,SVector{1,Int}(y))
+            end
         end
         y += 1
         Aspecy,bspecy,γspecy = sub_A_b_γ(A,b,γ,y)

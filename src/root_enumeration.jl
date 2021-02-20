@@ -2,7 +2,7 @@ using DataStructures
 using ResumableFunctions
 
 include("util.jl")
-include("qsolve.jl")
+include("qsolve_diag_constrained.jl")
 include("hyperbolic_lattices.jl")
 
 """
@@ -226,9 +226,9 @@ function roots_decomposed_into(VL::VinbergLattice, a::HyperbolicLatticeElement, 
     b = 2 *( M₁' * VL.L.G * a.vec)
     γ = a⊙a - k
   
-
+    sols = Vector{HyperbolicLatticeElement{r}}()
     # Finds solutions, translate them back to the lattice
-    for u in res_qsolve(A,b,γ)
+    for u in qsolve_diag_con(diag(A),b,γ,[])
         uu = HyperbolicLatticeElement(VL.L,M₁ * u + a.vec)
         @toggled_assert norm(uu) == k  "``u⊙u`` must be equal to k"
         @toggled_assert (uu-a)⊙VL.v₀ == 0 "``u-a`` must lie in `V₁`"
@@ -236,7 +236,6 @@ function roots_decomposed_into(VL::VinbergLattice, a::HyperbolicLatticeElement, 
             @yield uu 
         end
     end
-
 end
 
 
