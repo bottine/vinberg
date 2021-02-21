@@ -6,7 +6,7 @@ include("qsolve_diag_constrained.jl")
 include("hyperbolic_lattices.jl")
 
 """
-Given a `VinbergLattice` with underlying lattice ``L``, basepoint ``v₀``, orthogonal complement ``V₁=v₀^⟂`` and coset representatives ``W`` for the sublattice ``⟨v₀⟩⊕V₁``, any element ``u`` of ``L`` can be uniquely represented as 
+Given a `HyperbolicLattice` with underlying lattice ``L``, basepoint ``v₀``, orthogonal complement ``V₁=v₀^⟂`` and coset representatives ``W`` for the sublattice ``⟨v₀⟩⊕V₁``, any element ``u`` of ``L`` can be uniquely represented as 
 ```math
     u = a₀v₀ + v₁ + w
 ``` 
@@ -33,11 +33,11 @@ RootDecompositionPattern = Tuple{Int,                       # = k
 Pattern = RootDecompositionPattern
 
 """
-Computes the fake distance between the hyperplane between a root matching the root decomposition pattern `p` and `VL.v₀`.
+Computes the fake distance between the hyperplane between a root matching the root decomposition pattern `p` and `v₀(lat)`.
 """
-function fake_dist(p::RootDecompositionPattern,VL::VinbergLattice)
+function fake_dist(p::RootDecompositionPattern,lat::HyperbolicLattice)
     (k,w,a) = p
-    (a*VL.v₀_norm + (times_v₀(VL,w)))^2//k
+    (a*v₀_norm(lat) + (times_v₀(lat,w)))^2//k
 end
 
 """
@@ -64,8 +64,8 @@ Note that if ``a₀`` is not an integer, we'll need to take the closest one, obv
 That is, we iterate by distance to `v₀`, but only one "one side"
 """
 mutable struct RootDecompositionPatternsByDistance
-    # The VinbergLattice in which we're working
-    VL::VinbergLattice
+    # The HyperbolicLattice in which we're working
+    lat::HyperbolicLattice
     # For each pair `(w,k)` the "iterator" a₊
     next_least_a_for_w_and_k::Union{
                                      Nothing,  # In case we haven't started iterating
@@ -82,22 +82,22 @@ Constructs an instance of `RootDecompositionPatternsByDistance` by iterating ove
 * Finding the ``a₀`` (non-necessarily integer) attaining the minimum distance for the pair ``(k,w)``.
 * Taking its `ceil`to define `a₊`(the "iterator").
 """
-function RootDecompositionPatternsByDistance(VL::VinbergLattice)
+function RootDecompositionPatternsByDistance(lat::HyperbolicLattice)
     
-    v₀ = VL.v₀
-    W = VL.W
+    W = lat.W
     
     # This is the fake dist to be minimized
     # Only define it for verification purposes
-    # We can't just use `fake_dist(::Pattern,::VinbergLattice)` because we use it on `a₀`, not necessarily an integer.
-    f_dist(k,w,a) = (a*VL.v₀_norm + (times_v₀(VL,w)))^2//k
+    # We can't just use `fake_dist(::Pattern,::HyperbolicLattice)` because we use it on `a₀`, not necessarily an integer.
+    f_dist(k,w,a) = (a*v₀_norm(lat) + (times_v₀(lat,w)))^2//k
 
     next_least_a_for_w_and_k = SortedDict{Tuple{HyperbolicLatticeElement,Int},Int}()
      
-    for w in W, k in root_lengths(VL.L)
+    for w_ in W, k in root_lengths(lat)
+        w = lat(w_) 
         # Find the minimal ``a₀``
-        a₀::Rational{Int} = -times_v₀(VL,w)//VL.v₀_norm; 
-        @toggled_assert -(w⊙v₀)//(v₀⊙v₀) == -times_v₀(VL,w)//VL.v₀_norm "The optimized computation should equal the full one."
+        a₀::Rational{Int} = -times_v₀(lat,w)//v₀_norm(lat); 
+        @toggled_assert -(w⊙v₀(lat))//(v₀(lat)⊙v₀(lat)) == -times_v₀(lat,w)//v₀_norm(lat) "The optimized computation should equal the full one."
         
         # Its integer approximation in the positive direction 
         a₊::Int = ceil(a₀)
@@ -112,7 +112,7 @@ function RootDecompositionPatternsByDistance(VL::VinbergLattice)
 
     current_fake_dist::Union{Nothing,Rational{Int}} = nothing
 
-    return RootDecompositionPatternsByDistance(VL,next_least_a_for_w_and_k,current_fake_dist)
+    return RootDecompositionPatternsByDistance(lat,next_least_a_for_w_and_k,current_fake_dist)
 
 
 end
@@ -133,11 +133,10 @@ The function proceeds as follows:
 """
 function next!(pats::RootDecompositionPatternsByDistance)::Tuple{Vector{RootDecompositionPattern},Rational{Int}}
     
-    v₀ = pats.VL.v₀
-    VL = pats.VL
+    lat = pats.lat
     
-    # The fake distance, redefined here so that we don't have to give `VL` explicitely at each call.
-    f_dist(k,w,a) = (a*VL.v₀_norm + (times_v₀(VL,w)))^2//k
+    # The fake distance, redefined here so that we don't have to give `lat` explicitely at each call.
+    f_dist(k,w,a) = (a*v₀_norm(lat) + (times_v₀(lat,w)))^2//k
         
     # No min_val yet, no patterns either
     min_val = nothing
@@ -179,7 +178,7 @@ end
 
 
 """
-    roots_decomposed_into(VL,a,k)
+    roots_decomposed_into(lat,a,k)
 
 Returns all roots ``r`` of ``L`` that can be written as 
 ```math
@@ -210,28 +209,33 @@ and now ``M₁'GM₁`` is positive definite (since ``V₁`` is the orthogonal co
 This results in a "positive definite" quadratic equation for ``b₁``, which we know how to solve. 
 It suffices then to transform back
 """
-function roots_decomposed_into(VL::VinbergLattice, a::HyperbolicLatticeElement, k::Int) end
+function roots_decomposed_into(lat::HyperbolicLattice, a::HyperbolicLatticeElement, k::Int) end
 
 @resumable function roots_decomposed_into(
-    VL::VinbergLattice{r,r_minus_one}, 
-    a::HyperbolicLatticeElement{r}, 
-    k::Int
-)::HyperbolicLatticeElement{r} where {r,r_minus_one}
+    lat::HyperbolicLattice{r},
+    a₀::Int,
+    w::HyperbolicLatticeElement{r},
+    k::Int,
+)::HyperbolicLatticeElement{r} where {r}
 
-
-    M₁ = VL.V₁_basis_matrix
+    a = a₀*v₀(lat) + w
     
+    w_coordinate = lat.W_coordinates[findall(x->x==vec(w),lat.W)[1]]
+
+    M₁ = lat.P[:,2:end]
+   
+
     # Translate our problem into a positive definite quadratic equation, solvable by `qsolve()`
-    A = M₁' * VL.L.G * M₁
-    b = 2 *( M₁' * VL.L.G * a.vec)
+    A = M₁' * lat.G * M₁
+    b = 2 *( M₁' * lat.G * vec(a))
     γ = a⊙a - k
   
     sols = Vector{HyperbolicLatticeElement{r}}()
     # Finds solutions, translate them back to the lattice
     for u in qsolve_diag_con(diag(A),b,γ,[])
-        uu = HyperbolicLatticeElement(VL.L,M₁ * u + a.vec)
+        uu = lat(M₁ * u + vec(a))
         @toggled_assert norm(uu) == k  "``u⊙u`` must be equal to k"
-        @toggled_assert (uu-a)⊙VL.v₀ == 0 "``u-a`` must lie in `V₁`"
+        @toggled_assert (uu-a)⊙v₀(lat) == 0 "``u-a`` must lie in `V₁`"
         if is_root(uu,k)
             @yield uu 
         end
@@ -242,19 +246,17 @@ end
 
 
 @resumable function roots_by_distance(
-    VinLat::VinbergLattice{r,r_minus_one}
-) :: HyperbolicLatticeElement{r} where {r,r_minus_one} 
+    lat::HyperbolicLattice{r}
+) :: HyperbolicLatticeElement{r} where {r} 
     
-    patterns = RootDecompositionPatternsByDistance(VinLat)
-    VinLat = patterns.VL
-    v₀ = VinLat.v₀
+    patterns = RootDecompositionPatternsByDistance(lat)
     
     while true
         
         (current_patterns,dist) = next!(patterns)
         for (k,w,a) in current_patterns
-            for root in roots_decomposed_into(VinLat,a*v₀ + w,k)
-                @toggled_assert fake_dist(VinLat,root) == patterns.current_fake_dist
+            for root in roots_decomposed_into(lat,a,w,k)
+                @toggled_assert fake_dist(lat,root) == patterns.current_fake_dist
                 @yield root
             end
         end

@@ -29,8 +29,8 @@ function Vinberg_Algorithm_stats(
     v₀_vec=nothing
 )
     G = txtmat_path_to_matrix(joinpath(folder, path))
-    roots, time = @timed Vinberg_Algorithm(VinbergLattice(G, v₀_vec=v₀_vec))
-    v₀_vec = VinbergLattice(G, v₀_vec=v₀_vec).v₀.vec
+    roots, time = @timed Vinberg_Algorithm(HyperbolicLattice(G, v₀_vec=v₀_vec))
+    v₀_vec = HyperbolicLattice(G, v₀_vec=v₀_vec).v₀.vec
     # return JSON.json(Dict("path"=>path,"matrix"=>G,"v₀"=>v₀_vec,"roots"=>roots,"time"=>time))
     return Dict("path" => path, "matrix" => G, "v₀" => v₀_vec, "roots" => roots, "time" => time)
 end
@@ -56,16 +56,7 @@ function test_suite(label=nothing;cache_behaviour=:empty_batched,log_location=no
 
     seen = []
     
-    if cache_behaviour == :empty_batched
-        println("caches are emptied between batched i.e. every time test_suite is run")
-    end
-    if cache_behaviour == :empty_singles
-        println("caches are emptied between every single lattice")
-    end
 
-    if cache_behaviour == :empty_batched
-        empty!(memoize_cache(is_necessary_halfspace))
-    end
 
     open("lattices/known_values.json", "r") do io
        
@@ -87,22 +78,19 @@ function test_suite(label=nothing;cache_behaviour=:empty_batched,log_location=no
             @assert G == matrix
             println("Looking at $path:")
             
-            if cache_behaviour == :empty_singles
-                println("emptying caches")
-                empty!(memoize_cache(is_necessary_halfspace))
-            end 
 
-            my_roots, my_time = @timed Vinberg_Algorithm(VinbergLattice(G))
-            VL = VinbergLattice(G)
-            v₀_vec = VL.v₀.vec
+
+            my_roots, my_time = @timed Vinberg_Algorithm(HyperbolicLattice(G))
+            lat = HyperbolicLattice(G)
+            v₀_vec = vec(v₀(lat))
             
              
             if label ≠ nothing
                 push!(time_history, label => my_time)
             end
 
-            myr = [(fake_dist(VL, VL.L(r)),r) for r in my_roots]
-            ofr = [(fake_dist(VL, VL.L(r)),r) for r in roots]
+            myr = [(fake_dist(lat, lat(r)),r) for r in my_roots]
+            ofr = [(fake_dist(lat, lat(r)),r) for r in roots]
 
             sort!(myr)
             sort!(ofr)

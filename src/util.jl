@@ -12,6 +12,7 @@ using ToggleableAsserts
 # But we still need to have big integers.
 # Hopefully Int512 is enough
 
+Rat = Rational{Int}
 
 iff(a::Bool,b::Bool) = a&&b || (!a)&&(!b)
 
@@ -28,7 +29,7 @@ function diagonalize(A::Array{Int,2})
     return diagonalize(SMatrix{size(A)[1],size(A)[2],Int}(A))
 end
 
-function diagonalize(A::SMatrix{rank,rank,Int}) where {rank}
+function diagonalize(A::SMatrix{dim,dim,Int}) where {dim}
     # returns T and D with D = T'GT
     # algorithm copied from there https://math.stackexchange.com/questions/1388421/reference-for-linear-algebra-books-that-teach-reverse-hermite-method-for-symmetr
     # plus a gcd step to reduce the growth of values
@@ -43,8 +44,8 @@ function diagonalize(A::SMatrix{rank,rank,Int}) where {rank}
 
     n = size(A)[1]
     i0 = 1
-    I_ = SMatrix{rank,rank,Int128}(I)
-    M::MMatrix{rank,2*rank} = [A I_]
+    I_ = SMatrix{dim,dim,Int128}(I)
+    M::MMatrix{dim,2*dim} = [A I_]
     while i0 ≤ n
        
       
@@ -84,16 +85,43 @@ function diagonalize(A::SMatrix{rank,rank,Int}) where {rank}
     end
    
 
-    D::SMatrix{rank,rank,Int} = M[1:n,1:n]
-    Q::SMatrix{rank,rank,Int} = M[1:n,n+1:2*n]
-    P::SMatrix{rank,rank,Int} = Q'
-   
+    D::MMatrix{dim,dim,Int} = M[1:n,1:n]
+    Q::MMatrix{dim,dim,Int} = M[1:n,n+1:2*n]
+    P::MMatrix{dim,dim,Int} = Q'
+     
 
 
     @assert LinearAlgebra.isdiag(D) "D is diagonal", D
     @assert P'*A*P == D "We have a diagonalization"
+   
+
+    # If the signature is (n,1), we put the negative eigenvalue first
+    if dim > 1 && D[1,1] ≥ 0
+        for i in 2:dim
+            if D[i,i] < 0
+                
+                # Construct a transposition matrix
+                T = MMatrix{dim,dim,Int}(I(dim))
+                T[i,1] = 1
+                T[1,i] = 1
+                T[i,i] = 0
+                T[1,1] = 0
+                
+                # transpose on the diagonal
+                D[1,1],D[i,i] = D[i,i],D[1,1]
+                # apply the transposition to P
+                P = P*T
+                
+                break
+            end
+        end
+    end
     
-    return (D,P)
+    @assert LinearAlgebra.isdiag(D) "D is diagonal", D
+    @assert P'*A*P == D "We have a diagonalization"
+    @assert A == inv(P')*D*inv(P) "We have a diagonalization"
+
+    return (SMatrix{dim,dim,Int}(D),SMatrix{dim,dim,Int}(P))
 
 end
 
@@ -203,7 +231,10 @@ function get_integer_points_with_coordinates(
     return SVector(integer_points),SVector(integer_points_coordinates)
 end
 
-@memoize Dict function is_necessary_halfspace(cone_roots::Vector{SVector{rank,Int}},root::SVector{rank,Int}) where {rank}
+
+is_necessary_halfspace(D,rr,r) = is_necessary_halfspace([D .* ro for ro in rr],D .* r)
+
+function is_necessary_halfspace(cone_roots::Vector{SVector{rank,Rat}},root::SVector{rank,Rat}) where {rank}
 
 
     n = rank

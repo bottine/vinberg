@@ -15,22 +15,18 @@ Given the collection of roots `rr` and a root `r`, (and the corresponding partia
 
 """ 
 function is_necessary_halfspace(
-    rr#=::Vector{HyperbolicLatticeElement{n}}=#,
-    rr_pp#=::Vector{SVector{n,Int}}=#,
-    r#=::HyperbolicLatticeElement{n}=#,
-    r_pp#=::SVector{n,Int}=#
-) #where {n}
+    rr::Vector{HyperbolicLatticeElement{n}},
+    r::HyperbolicLatticeElement{n},
+)::Bool where {n}
     
     #TODO: put signature back in a way that the compiler likes
 
     L = r.L
     @toggled_assert all(ro.L == r.L for ro in rr)
     @toggled_assert is_root(r)
-    @toggled_assert L.G*r.vec == r_pp
     @toggled_assert all(is_root(ro) for ro in rr)
-    @toggled_assert all(L.G*ro.vec == ro_pp for (ro,ro_pp) in zip(rr,rr_pp))
-
-    return is_necessary_halfspace(rr_pp,r_pp)
+    
+    return is_necessary_halfspace(L.D,[ro.diag_coordinates for ro in rr],r.diag_coordinates)
 
 end
 
@@ -42,51 +38,46 @@ Given the collection of roots `roots` defining a cone and the corresponding part
 """
 function drop_redundant_halfspaces(
     roots#=::Vector{HyperbolicLatticeElement{n}}=#,
-    roots_pp#=::Vector{SVector{n,Int}}=#
 )# where {n}
     
     #TODO: put signature back in a way that the compiler likes
     
-    for i in reverse(collect(1:length(roots)))
+    for i in length(roots):-1:1
        
         rr = copy(roots)
         r = popat!(rr,i)
-        rr_pp = copy(roots_pp)
-        r_pp = popat!(rr_pp,i)
 
-        if ! is_necessary_halfspace(rr_pp,r_pp)
-            return drop_redundant_halfspaces(rr,rr_pp) 
+        if ! is_necessary_halfspace(rr,r)
+            return drop_redundant_halfspaces(rr) 
         end
     end
     
-    return (roots,roots_pp)
+    return roots
     
 end
 
 
 """
-    roots_of_fundamental_cone(VL,roots_at_distance_zero)
+    roots_of_fundamental_cone(lat,roots_at_distance_zero)
 
-Given the collection `roots_at_distance_zero` of roots at distance zero to `VL.v₀` (technically, roots with induced hyperplane at distance zero from ``v₀``), find a minimal subset defining a fundamental cone containing ``v₀``.
+Given the collection `roots_at_distance_zero` of roots at distance zero to `lat.v₀` (technically, roots with induced hyperplane at distance zero from ``v₀``), find a minimal subset defining a fundamental cone containing ``v₀``.
 """
 function roots_of_fundamental_cone(
-    VL::VinbergLattice,
-    roots_at_distance_zero::Vector{HyperbolicLatticeElement}
-)
+    lat::HyperbolicLattice{n},
+    roots_at_distance_zero::Vector{HyperbolicLatticeElement{n}}
+)::Vector{HyperbolicLatticeElement{n}} where {n}
     
     @toggled_assert (length(roots_at_distance_zero) == length(Set(roots_at_distance_zero))) "No root should appear more than once (sanity check)."
 
     # Store the candidate roots, and their partial product with G, for efficiency's sake, hopefully ("pp" stands for "partial product")
     candidate_roots = roots_at_distance_zero
-    candidate_roots_pp = [VL.L.G * r.vec for r in candidate_roots]
     @info "Starting with $(length(candidate_roots)) candidate roots (at distance zero) for fundamental cone."
 
     # Start with an empty set of roots (and corresponding partial products) in the cone.
-    cone_roots::Vector{HyperbolicLatticeElement} = Vector()
-    cone_roots_pp::Vector{SVector{rk(VL.L),Int}}= Vector()
+    cone_roots::Vector{HyperbolicLatticeElement{n}} = Vector()
 
     # Iterate over all roots (and the precomputed corresponding partial product)
-    for (r,r_pp) in zip(candidate_roots,candidate_roots_pp)
+    for r in candidate_roots
         @debug "Considering candidate root $r."
 
         # If the opposite of the root already is in the cone roots, adding this one would make the cone degenerate.
@@ -102,47 +93,44 @@ function roots_of_fundamental_cone(
            
             # Test that adding the halfspace ``ℋ_r⁻`` defined by `r` doesn't make the resulting cone degenerate (checked by `is_necessary_halfspace(cone_roots, -r`).
             # Indeed, the intersection becomes degenerate iff the intersection with ``ℋ_{-r}⁻ = ℋ_r⁺`` is /not/ strictly smaller than the original cone, which is iff ``-r`` defines a necessary halfspace.
-            #if is_necessary_halfspace(cone_roots::Vector{HyperbolicLatticeElement{rk(VL.L)}},cone_roots_pp::Vector{SVector{rk(VL.L),Int}},-r::HyperbolicLatticeElement{rk(VL.L)},-r_pp::SVector{rk(VL.L),Int})
-            if is_necessary_halfspace(cone_roots,cone_roots_pp,-r,-r_pp)
+            #if is_necessary_halfspace(cone_roots::Vector{HyperbolicLatticeElement{rk(lat)}},cone_roots_pp::Vector{SVector{rk(lat),Int}},-r::HyperbolicLatticeElement{rk(lat)},-r_pp::SVector{rk(lat),Int})
+            if is_necessary_halfspace(cone_roots,-r)
                 @debug "And it does not make the cone degenerate."
                 
                 push!(cone_roots,r)
-                push!(cone_roots_pp,r_pp)
             end
         
         end
         
     end
     
-    (cone_roots,cone_roots_pp) = drop_redundant_halfspaces(cone_roots, cone_roots_pp)
+    cone_roots = drop_redundant_halfspaces(cone_roots)
     @info "Returning $(length(cone_roots)) cone roots."
-    return (cone_roots, cone_roots_pp)
+    return cone_roots
 
 end
 
 """
-    Vinberg_Algorithm(VL::VinbergLattice[;rounds=nothing])
+    Vinberg_Algorithm(lat::HyperbolicLattice[;rounds=nothing])
 
-Run the Vinberg algorithm on the lattice ``VL.L`` with basepoint ``VL.v₀`` until `rounds` roots have been considered (if `rounds=nothing`, then the algorithm runs indefinitely long).
+Run the Vinberg algorithm on the lattice ``lat`` with basepoint ``lat.v₀`` until `rounds` roots have been considered (if `rounds=nothing`, then the algorithm runs indefinitely long).
 """
 function Vinberg_Algorithm(
-    VL::VinbergLattice;
+        lat::HyperbolicLattice{n};
     rounds=nothing
-)
+) where {n}
 
     
-    v₀ = VL.v₀
-    G = VL.L.G
-    n = rk(VL.L)
+    G = lat.G
    
     # We make our iterator peekable so that we can look at the next root without consuming it: 
-    new_roots_iterator = roots_by_distance(VL)
+    new_roots_iterator = roots_by_distance(lat)
     @info "Initialized root iterator."
 
-    roots_at_distance_zero = Vector{HyperbolicLatticeElement}()
+    roots_at_distance_zero = Vector{HyperbolicLatticeElement{n}}()
 
     # Getting next (actually the first!) root
-    while fake_dist(VL,(local new_root=new_roots_iterator())) == 0
+    while fake_dist(lat,(local new_root=new_roots_iterator())) == 0
         push!(roots_at_distance_zero,new_root)
     end
     # All roots at distance zero have now been considered
@@ -155,7 +143,7 @@ function Vinberg_Algorithm(
     # Get all roots defining a fundamental cone for `v₀`
     # Note that there is some degree of freedom here since `v₀` can lie in different cones.
     # But once a cone is fixed, all the other roots appearing afterwards are uniquely defined.
-    (roots, roots_pp) = roots_of_fundamental_cone(VL,roots_at_distance_zero)
+    roots = roots_of_fundamental_cone(lat,roots_at_distance_zero)
     @info "Got the roots of a fundamental cone."
     for r in roots
         @info "                         : $r."
@@ -171,18 +159,14 @@ function Vinberg_Algorithm(
         !isnothing(rounds) && round_num ≥ rounds && break 
         round_num += 1
 
+
         @debug "Trying new root $new_root."
         
-        @toggled_assert iff(
-                            (all(r_pp' * new_root.vec ≤ 0 for r_pp in roots_pp) && times_v₀(VL,new_root) < 0),
-                            (all((new_root⊙r) ≤ 0 for r in roots) && VL.v₀ ⊙ new_root < 0)
-                           ) "Precomputed products should be the same as non-precomputed ones."
-        
-        if any( (r_pp' * new_root.vec > 0)::Bool for r_pp in roots_pp)
+        if any( (r ⊙ new_root > 0)::Bool for r in roots)
             # Acute angle condition ?
             @debug "It doesn't satisfy the acute angle condition; discarding it."
         
-        elseif times_v₀(VL,new_root) ≥ 0
+        elseif times_v₀(lat,new_root) ≥ 0
             # Normally, the way the code is written now makes it so that this condition is always satisfied: we only get roots containing v₀ in their correct halfspace
 
             # v₀ on the correct side of the halfspace ?
@@ -191,10 +175,8 @@ function Vinberg_Algorithm(
         else
             
             # new_root now satisfies all the requirements to be added to our set of roots.
-            new_root_pp = G*new_root.vec
             extend!(diagram,[Coxeter_coeff(r,new_root) for r in roots])
             push!(roots,new_root)
-            push!(roots_pp,new_root_pp)
 
 
             @info "Found new satisfying root: $new_root."
@@ -208,8 +190,8 @@ function Vinberg_Algorithm(
     end
    
     println("Decision ($(rounds)) :", is_finite_volume(diagram))
-    @toggled_assert length(roots) == length(drop_redundant_halfspaces(roots,roots_pp)[1])
-    return sort([r.vec for r in roots])
+    @toggled_assert length(roots) == length(drop_redundant_halfspaces(roots))
+    return sort([vec(r) for r in roots])
 
 end
 

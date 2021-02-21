@@ -9,7 +9,7 @@ import Base: vec, convert
 include("util.jl")
 
 
-
+Rat = Rational{Int}
 
 """
 A hyperbolic lattice, defined by a symmetric matrix with integer coefficients, of signature `(n,1)`.
@@ -36,8 +36,11 @@ struct HyperbolicLattice{rank}
     
     # Diagonalisation pair.
     P::SMatrix{rank,rank,Int}
+    Pinv::SMatrix{rank,rank,Rat}
     D::SVector{rank,Int}
-    
+    W::Vector{SVector{rank,Int}}
+    W_coordinates::Vector{SVector{rank,Rat}}
+
     # Last invariant factor and possible root lengths.
     last_invariant_factor::Int
     root_lengths::Vector{Int}
@@ -72,14 +75,17 @@ function HyperbolicLattice(G)
     D,P = diagonalize(sG)
     @assert P'*G*P == D ""
     @assert isdiag(D)
+    @assert D[1] < 0
     # Get the diagonal vector of `D`
     D = diag(D) 
-    
-    # Compute the last invariant factor:
-    # * taking `rG` should force the determinant and inverse computations to be exact.
-    # * we use [this idea](https://stackoverflow.com/questions/58149645/julia-how-can-we-compute-the-adjoint-or-classical-adjoint-linear-algebra) to compute the cofactor matrix.i
-    #
-    # TODO: do we **need** the `abs(Int(…))` part?
+   
+  
+    absdetP = Int(abs(det(Rational{Int}.(P))))
+
+    W_,W_coordinates_ = get_integer_points_with_coordinates(P,absdetP)
+    W = Vector(W_) # coset representatives under "natural" coordinates
+    W_coordinates = Vector(W_coordinates_) # coset represnetative under "diagonal" coordinates
+
     rG = Rational{Int}.(sG)
     cofactorsG = det(rG) * inv(rG) # 
     last_invariant_factor = abs(Int(det(rG)//gcd(cofactorsG)))
@@ -88,7 +94,23 @@ function HyperbolicLattice(G)
     twice_LIF = 2*last_invariant_factor
     root_lengths =  [k for k in 1:twice_LIF if twice_LIF%k == 0]
     
-    return HyperbolicLattice(rank,sG,P,D,last_invariant_factor,root_lengths)
+    return HyperbolicLattice(
+        rank,
+        sG,
+        P,
+        inv(Rat.(P)),
+        D,
+        W,
+        W_coordinates,
+        last_invariant_factor,
+        root_lengths
+    )
+end
+
+
+struct HyperbolicLatticeElement{rk}
+    L::HyperbolicLattice{rk}
+    diag_coordinates::SVector{rk,Rat}
 end
 
 function Base.:(==)(L1::HyperbolicLattice,L2::HyperbolicLattice)
@@ -107,17 +129,13 @@ function rk(L::HyperbolicLattice)
 end
 
 
-"""
-An element of a hyperbolic lattice, represented by:
-* `L::HyperbolicLattice`, the lattice it is a member of.
-* `vec`, the vector of its coordinate in the standard basis.
-    
-"""
-struct HyperbolicLatticeElement{rank}
-    L::HyperbolicLattice{rank}
-    vec::SVector{rank,Int}
+function v₀(L::HyperbolicLattice{rk}) where {rk}
+    return HyperbolicLatticeElement(L,SVector{rk,Rat}(vcat([1],[0 for i in 1:rk-1])))
 end
 
+function times_v₀(L::HyperbolicLattice,v::HyperbolicLatticeElement)
+    return L.D[1]*v.diag_coordinates[1]
+end
 
 """
     Create a hyperbolic lattice element out of a lattice `L` and a vector `vec` by first converting `vec` to a `SVector`.
@@ -125,19 +143,19 @@ end
 """
 function (L::HyperbolicLattice)(vec)
     svec = SVector{rk(L),Int}(vec)
-    HyperbolicLatticeElement(L,svec)
+    HyperbolicLatticeElement(L,L.Pinv*svec)
 end
 
 function Base.show(io::IO,v::HyperbolicLatticeElement) 
-    show(io,v.vec)
+    show(io,vec(v))
 end
 
 function Base.isequal(v1::HyperbolicLatticeElement,v2::HyperbolicLatticeElement)
-    v1.L == v2.L && v1.vec == v2.vec
+    v1.L == v2.L && v1.diag_coordinates == v2.diag_coordinates
 end
 
 function Base.:(==)(v1::HyperbolicLatticeElement,v2::HyperbolicLatticeElement)
-    v1.L == v2.L && v1.vec == v2.vec
+    v1.L == v2.L && v1.diag_coordinates == v2.diag_coordinates
 end
 
 """
@@ -146,12 +164,12 @@ end
 Compute the inner_product of its two arguments in their common lattice.
 Obtained as `v' * G * w`.
 """
-function inner_product(v::HyperbolicLatticeElement,w::HyperbolicLatticeElement)
+function inner_product(v::HyperbolicLatticeElement,w::HyperbolicLatticeElement)::Int
     @toggled_assert v.L == w.L "The elements must belong to the same lattice"
-    G = v.L.G
-    vv = v.vec
-    ww = w.vec
-    return vv⋅(G*ww)
+    D = v.L.D
+    vv = v.diag_coordinates
+    ww = w.diag_coordinates
+    return Int(sum(vv .* D .*  ww))
 end
 
 ⊙(v::HyperbolicLatticeElement,w::HyperbolicLatticeElement) = inner_product(v,w)
@@ -168,12 +186,12 @@ function standard_basis(L::HyperbolicLattice)
 end
 
 function Base.:-(v::HyperbolicLatticeElement) 
-    return HyperbolicLatticeElement(v.L,-v.vec)
+    return HyperbolicLatticeElement(v.L,-v.diag_coordinates)
 end 
 
 function Base.:+(v::HyperbolicLatticeElement,w::HyperbolicLatticeElement)
     @toggled_assert v.L == w.L "The elements must belong to the same lattice"
-    return HyperbolicLatticeElement(v.L,v.vec+w.vec)
+    return HyperbolicLatticeElement(v.L,v.diag_coordinates+w.diag_coordinates)
 end 
 
 function Base.:-(v::HyperbolicLatticeElement,w::HyperbolicLatticeElement)
@@ -182,8 +200,12 @@ function Base.:-(v::HyperbolicLatticeElement,w::HyperbolicLatticeElement)
 end 
 
 function Base.:*(k::Int, v::HyperbolicLatticeElement)
-    return HyperbolicLatticeElement(v.L,k*v.vec)
+    return HyperbolicLatticeElement(v.L,k*v.diag_coordinates)
 end 
+
+function v₀_norm(lat::HyperbolicLattice)
+    lat.D[1]
+end
 
 """
     Coxeter_coeff(r₁,r₂)
@@ -225,7 +247,7 @@ Ordering on `HyperboliclatticeElement` simply defined as the ordering on their r
 """
 function Base.isless(v::HyperbolicLatticeElement, w::HyperbolicLatticeElement)
     @toggled_assert v.L == w.L "The elements must belong to the same lattice"
-    return Base.isless(v.vec,w.vec)
+    return Base.isless(v.diag_coordinates,w.diag_coordinates)
 end
 
 """
@@ -234,15 +256,24 @@ end
 Test whether ``v`` satisfies the crystallographic condition in its lattice ``L``, that is, whether ``v⊙w`` is in ``L`` for any ``w`` in ``L``.
 If `norm_v` is not `nothing`, use it as the norm of `v`, i.e. assume that `norm(v) == norm_v`.
 """
-function crystallographic_condition(v::HyperbolicLatticeElement,norm_v=nothing::Union{Nothing,Int})
-     
-    nv::Int = norm_v === nothing ? norm(v) : norm_v
+function crystallographic_condition(v::HyperbolicLatticeElement,norm_v::Int)
+    
+    @toggled_assert norm_v == norm(v)
+
     @toggled_assert iff(
                         all(2*(e⊙v) % (v⊙v) == 0 for e in standard_basis(v.L)), 
-                        all(2*(row⋅v.vec) % nv == 0 for row in eachrow(v.L.G))
+                        all(2*(row⋅vec(v)) % norm_v == 0 for row in eachrow(v.L.G))
                        ) "Optimized check for the crystallographic condition should be equivalent to the complete one."
-    return all( (((2*x) % nv) == 0)::Bool for x in v.L.G * v.vec )
+    return all( (((2*x) % norm_v) == 0)::Bool for x in v.L.G * vec(v) )
 
+end
+
+function crystallographic_condition(v::HyperbolicLatticeElement)
+    crystallographic_condition(v,norm(v))
+end
+    
+function is_primitive(v::HyperbolicLatticeElement)
+    return abs(gcd(vec(v))) == 1
 end
 
 """
@@ -258,142 +289,34 @@ We follow B&P in our definition of a root; `v` is a root if:
 * `v` satisfies the crystallographic condition, meaning that reflecting along `v` preserves the lattice.
   This can be checked by verifying that the reflection of elements of the standard basis are still in the lattice.
 """
-function is_root(v::HyperbolicLatticeElement,norm_v=nothing::Union{Nothing,Int})
+function is_root(v::HyperbolicLatticeElement,norm_v::Int)::Bool
     
-    nv::Int = norm_v === nothing ? norm(v) : norm_v
+    @toggled_assert norm(v) == norm_v
     
     # A root has  positive norm.
     # TODO: check that it's indeed "positive" and not "non-negative"
-    if nv ≤ 0
-        return false
-    end
+    norm_v ≤ 0 && return false
 
     # A root is a primitive vector, i.e. the gcd of its entries is 1
-    vv = v.vec
-    if abs(gcd(vv)) ≠ 1
-        return false
-    end
+    !is_primitive(v) && return false
 
     # A root has length dividing twice the last invariant factor (see B&P) but 
     # this condition is actually not by definition, so we could skip it and get the same result afaik
-    if nv ∉ v.L.root_lengths
-        return false
-    end
+    norm_v ∉ v.L.root_lengths && return false
 
     # A root respects the crystallographic condition
-    if !crystallographic_condition(v,nv) 
-        return false
-    end
+    !crystallographic_condition(v,norm_v) && return false
 
     return true
 
 end
 
-
-"""
-A `VinbergLattice` is simply a `HyperbolicLattice` `L` plus a choice of vector `v₀` of the lattice, of negative norm.
-Given `L` and `v₀`, some more objects can be computed:
-Let `V₁` be the subgroup of `L` consisting of elements orthogonal to v₀, i.e. `V₁ = v₀^⟂`.
-We can compute a basis of `V₁`, using methods of the package `AbstractAlgebra`.
-The sublattice `⟨v₀⟩⊕V₁` is of finite index in L, and we can therefore find a finite set of (coset) representatives.
-
-We therefore store:
-
-* The lattice `L`,
-* The negative norm vector `v₀`
-
-And the related data for convenience/performance:
-
-* `V₁_basis_matrix` is rank×rank_minus_1 matrix whose columns are a basis for `V₁`
-* `W` a set of coset representatives for the sublattice `⟨v₀⟩⊕V₁`.
-* `v₀_vec_times_G == v₀.vec' * G` corresponds to the computation v₀.vec ⋅ G, which makes multiplication of v₀ with other elements faster:
-  `v₀⊙e = v₀.vec' * L.G * e.vec = v₀_vec_times_G * e.vec` so that we can skip one matrix multiplication
-* `v₀_norm == v₀⊙v₀` is the norm of v₀, which we precompute sincet it is used often.
-
-Note that the type VinbergLattice{rank,rank_minus_1} is parametrized by the two parameters `rank,rank_minus_1`, but they must satisfy `rank-1 == rank_minus_1`.
-This useless second parameter is due to a [limitation of julia](https://discourse.julialang.org/t/addition-to-parameter-of-parametric-type/20059/5).
-"""
-struct VinbergLattice{rank,rank_minus_1}
-    
-    # The lattice
-    L::HyperbolicLattice{rank}
-   
-    # The negative norm vector "basepoint"
-    v₀::HyperbolicLatticeElement{rank}
-
-    # A basis of V₁, in the form of a matrix
-    V₁_basis_matrix::SMatrix{rank,rank_minus_1,Int}
-
-    # The representatives for `⟨v₀⟩⊕V₁` 
-    W::Vector{HyperbolicLatticeElement{rank}}
-    W_coordinates::Vector{SVector{rank,Rational{Int}}}
-
-    # Precomputations
-    v₀_vec_times_G::SVector{rank,Int} # used to hopefully make computations of the form v₀⊙something faster
-    v₀_norm::Int # the norm of v₀ computed once and for all
+function is_root(v::HyperbolicLatticeElement)::Bool
+    return is_root(v,norm(v))
 end
 
-"""
-The result of multiplying `e` with `v₀`, i.e. `e⊙v₀`.
-"""
-function times_v₀(VL::VinbergLattice,e::HyperbolicLatticeElement)
-    @toggled_assert e.L == VL.L
-
-    @toggled_assert VL.v₀_vec_times_G ⋅ e.vec == VL.v₀⊙e "Optimized computation should not differ from official one"
-    return VL.v₀_vec_times_G ⋅ e.vec
-end
-
-function Base.:(==)(L1::VinbergLattice,L2::VinbergLattice)
-    @assert false "Let's not compare vinberg lattices yet"
-end
-
-"""
-    VinbergLattice(G[;v₀_vec])
-
-Construct a `VinbergLattice`.
-"""
-function VinbergLattice(G::Array{Int,2})
-   
-    assert_sig_n_1_matrix(G)
-    
-    rk = size(G)[1]
-    L = HyperbolicLattice(G)
-
-    @assert L.P'*L.G*L.P == diagm(L.D)
-    neg_index = [i for i in 1:rk if L.D[i] < 0][1]
-    V₁_basis_matrix = if neg_index == 1
-        SMatrix{rk,rk-1,Int}(L.P[:,neg_index+1:end])
-        elseif neg_index == rk
-            SMatrix{rk,rk-1,Int}(L.P[:,1:neg_index-1])
-        else
-            SMatrix{rk,rk-1,Int}(hcat(L.P[:,1:neg_index-1],L.P[:,neg_index+1:end]))
-        end
-        v₀ = L(SVector{rk,Int}(L.P[:,neg_index]))
-    
-    @toggled_assert norm(v₀) < 0 "v₀ needs to have negative norm"
-    
-
-    # Computes a matrix `M` whose columns are the basis of `V₁` computed before, plus `v₀`
-    sM = SMatrix{rk,rk}(L.P)
-  
-    absdetM = Int(abs(det(Rational{Int}.(sM))))
-
-    # Compute the representatives of `⟨v₀⟩⊕V₁`
-    W_,W_coordinates = get_integer_points_with_coordinates(sM,absdetM)
-    W = (x -> HyperbolicLatticeElement(L,SVector{rk,Int}(x))).(W_)
-  
-    v₀_norm = norm(v₀)
-
-    @toggled_assert length(W) == absdetM  "The number of representative, i.e. the index of the sublattice must be the same as the determinant of the matrix whose columns are a basis for the sublattice.\n Here we have $(length(W)) ≠ $(absdetM)"
-    #@toggled_assert v₀_norm % length(W) == 0 "According to B&P, the norm of v₀ must divide the index of the sublattice"
-   
-    v₀_vec_times_G = SVector{rk,Int}(v₀.vec' *  G)
-
-    return VinbergLattice(L,v₀,V₁_basis_matrix,Vector(W),Vector(W_coordinates),v₀_vec_times_G,v₀_norm)   
-end
-
-function Base.convert(v::HyperbolicLatticeElement) 
-    return v.vec::Array{Int,1} 
+function vec(v::HyperbolicLatticeElement) 
+    return Int.(v.L.P*v.diag_coordinates) 
 end
 
 """
@@ -403,23 +326,18 @@ where `VL::VinbergLattice` and `e::HyperbolicLatticeElement` is assumed to be a 
 The actual distance between the vector `v₀` and the hyperplane `e^⟂` in the hyperbolic space `ℍ^n` is monotonous with this "fake distance".
 We rather use the "fake distance" since it does not involve approximate computations.
 """
-function fake_dist(VL::VinbergLattice,e::HyperbolicLatticeElement)
+function fake_dist(L::HyperbolicLattice,e::HyperbolicLatticeElement)
 
     @toggled_assert is_root(e)
-    @toggled_assert e.L == VL.L
-    @toggled_assert (VL.v₀_vec_times_G ⋅ e.vec)^2//(e⊙e) == (e⊙VL.v₀)^2//(e⊙e)
-    @toggled_assert times_v₀(VL,e)^2//(e⊙e) == (e⊙VL.v₀)^2//(e⊙e)
+    @toggled_assert e.L == L
+    @toggled_assert times_v₀(L,e)^2//(e⊙e) == (e⊙v₀(L))^2//(e⊙e)
     
-    return times_v₀(VL,e)^2//(e⊙e)
+    return times_v₀(L,e)^2//(e⊙e)
 
 end
 
 function zero_elem(L::HyperbolicLattice)
     HyperbolicLatticeElement(L,SVector{rk(L),Int}(zeros(rk(L))))
-end
-
-function zero_elem(VL::VinbergLattice)
-    zero_elem(VL.L) 
 end
 
 """
@@ -435,32 +353,6 @@ function reflection(r::HyperbolicLatticeElement,v::HyperbolicLatticeElement)
 end
 
 """
-Computes a basis (over ℤ) for the orthogonal complement `v^⟂` of `v`.
-An element `e` lies in `v^⟂` iff `e.vec'*G*v.vec == e⊙v == 0`, which is iff `e.vec` is in the kernel of `G*v.vec`
-
-"""
-function matrix_basis_of_orthogonal_complement(v::HyperbolicLatticeElement)
-   
-    rank = rk(v.L)
-
-    # We make use of `AbstractAlgebra`, so first need to convert to its types.
-    # We create a space of mutrices over ℤ and of dimensions `1×rk(L)`
-    S = MatrixSpace(ZZ, 1, rank)
-
-    # Politely ask AbstractAlgebra for a basis
-    Mv = v.L.G * v.vec
-    MMv = S(reduce(vcat,Mv))
-    @toggled_assert MMv == S(Mv')
-    right_ker_rank, right_ker = right_kernel(MMv)
-    
-    @toggled_assert right_ker_rank == rank - 1 "We need a basis for V₁; its dimension must be rk(L)-1"
-
-    # convert back to a type we understand
-    return SMatrix{rank,rank-1}(Matrix(right_ker))
-
-end
-
-"""
     Computes `sinh(the distance between v and the hyperplane defined by e)`.
     `e` must be a root.
 """
@@ -472,34 +364,9 @@ function sinh_distance_to_hyperplane(v::HyperbolicLatticeElement, e::HyperbolicL
     return sqrt( - (e⊙v)^2 / ( norm(e)*norm(v) ) ) 
 end 
 
-distance_to_hyperplane(v::HyperbolicLatticeElement, e::HyperbolicLatticeElement) =  asinh( sinh_distance_to_hyperplane(v,e) )
-
-"""
-Find a vector of negative norm in the lattice, by diagonalization.
-"""
-function negative_vector(L::HyperbolicLattice)
-    
-    rank = rk(L)
-    
-    # Find `P` and `D` diagonal such that `P'GP = D` is diagonal
-    G,D,P = L.G,L.D,L.P 
-    @toggled_assert P'*G*P == Diagonal(D)
-
-    # D necessarily has one negative entry since the signature of `G` is `(rk-1,1)`
-    # Find the element corresponding to this negative entry
-    v₀_vec = [P'[i,:] for i in eachindex(D) if D[i]<0][1]
-    # Normalize it 
-    v₀_vec = (1//gcd(v₀_vec))*v₀_vec
-    
-    v₀ = HyperbolicLatticeElement(L,SVector{rank,Int}(v₀_vec))
-    
-
-    # verify that it indeed has negative norm
-    @toggled_assert norm(v₀) < 0 "v₀ must have negative norm"
-
-    return v₀
-
-end
-
+distance_to_hyperplane(
+    v::HyperbolicLatticeElement,
+    e::HyperbolicLatticeElement
+) =  asinh( sinh_distance_to_hyperplane(v,e) )
 
 
