@@ -216,6 +216,7 @@ function roots_decomposed_into(lat::HyperbolicLattice, a::HyperbolicLatticeEleme
     a₀::Int,
     w::HyperbolicLatticeElement{r},
     k::Int,
+    constraints=[],
 )::HyperbolicLatticeElement{r} where {r}
 
     a = a₀*v₀(lat) + w
@@ -223,7 +224,8 @@ function roots_decomposed_into(lat::HyperbolicLattice, a::HyperbolicLatticeEleme
     w_coordinate = lat.W_coordinates[findall(x->x==vec(w),lat.W)[1]]
 
     M₁ = lat.P[:,2:end]
-   
+    
+    println("All the constraints $constraints")
 
     # Translate our problem into a positive definite quadratic equation, solvable by `qsolve()`
     A = M₁' * lat.G * M₁
@@ -232,7 +234,7 @@ function roots_decomposed_into(lat::HyperbolicLattice, a::HyperbolicLatticeEleme
   
     sols = Vector{HyperbolicLatticeElement{r}}()
     # Finds solutions, translate them back to the lattice
-    for u in qsolve_diag_con(diag(A),b,γ,[])
+    for u in qsolve_diag_con(diag(A),b,γ,constraints)
         uu = lat(M₁ * u + vec(a))
         @toggled_assert norm(uu) == k  "``u⊙u`` must be equal to k"
         @toggled_assert (uu-a)⊙v₀(lat) == 0 "``u-a`` must lie in `V₁`"
@@ -246,16 +248,29 @@ end
 
 
 @resumable function roots_by_distance(
-    lat::HyperbolicLattice{r}
+    lat::HyperbolicLattice{r},
+    interval_lower_bound=(x->true), # must match a non-empty interval of positive numbers
+    interval_upper_bound=(x->true),
+    known_roots=[],
 ) :: HyperbolicLatticeElement{r} where {r} 
     
     patterns = RootDecompositionPatternsByDistance(lat)
-    
+
+
     while true
         
         (current_patterns,dist) = next!(patterns)
+
+        if !interval_lower_bound(dist)
+            continue
+        end
+        if !interval_upper_bound(dist)
+            break
+        end
+
         for (k,w,a) in current_patterns
-            for root in roots_decomposed_into(lat,a,w,k)
+            constraints = [(root[2:end] .* D[2:end],-root⊙(a*w + v₀(lat))) for root in known_roots]
+            for root in roots_decomposed_into(lat,a,w,k,constraints)
                 @toggled_assert fake_dist(lat,root) == patterns.current_fake_dist
                 @yield root
             end

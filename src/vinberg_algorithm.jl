@@ -124,15 +124,10 @@ function Vinberg_Algorithm(
     G = lat.G
    
     # We make our iterator peekable so that we can look at the next root without consuming it: 
-    new_roots_iterator = roots_by_distance(lat)
     @info "Initialized root iterator."
 
-    roots_at_distance_zero = Vector{HyperbolicLatticeElement{n}}()
+    roots_at_distance_zero = Vector{HyperbolicLatticeElement{n}}([r for r in roots_by_distance(lat,x->true,==(0))])
 
-    # Getting next (actually the first!) root
-    while fake_dist(lat,(local new_root=new_roots_iterator())) == 0
-        push!(roots_at_distance_zero,new_root)
-    end
     # All roots at distance zero have now been considered
     # `new_root` is now the first root not at distance zero
     
@@ -154,7 +149,7 @@ function Vinberg_Algorithm(
     @info "Built the corresponding Coxeter diagram."
 
     round_num = 0 
-    for new_root in Iterators.flatten([[new_root],new_roots_iterator]) 
+    for new_root in  roots_by_distance(lat,>(0),x->true,[])
 
         !isnothing(rounds) && round_num ≥ rounds && break 
         round_num += 1
