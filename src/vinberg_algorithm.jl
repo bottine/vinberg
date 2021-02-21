@@ -21,12 +21,12 @@ function is_necessary_halfspace(
     
     #TODO: put signature back in a way that the compiler likes
 
-    L = r.L
-    @toggled_assert all(ro.L == r.L for ro in rr)
+    lat = r.lat
+    @toggled_assert all(ro.lat == r.lat for ro in rr)
     @toggled_assert is_root(r)
     @toggled_assert all(is_root(ro) for ro in rr)
     
-    return is_necessary_halfspace(L.D,[ro.diag_coordinates for ro in rr],r.diag_coordinates)
+    return is_necessary_halfspace(lat.D,[ro.diag_coordinates for ro in rr],r.diag_coordinates)
 
 end
 
@@ -124,13 +124,8 @@ function Vinberg_Algorithm(
     G = lat.G
    
     # We make our iterator peekable so that we can look at the next root without consuming it: 
-    @info "Initialized root iterator."
-
+    @info "Getting roots at distance zero"
     roots_at_distance_zero = Vector{HyperbolicLatticeElement{n}}([r for r in roots_by_distance(lat,x->true,==(0))])
-
-    # All roots at distance zero have now been considered
-    # `new_root` is now the first root not at distance zero
-    
     # Sort the roots, so as to have a predictable choice of fundamental cone
     sort!(roots_at_distance_zero)
     @info "Got all roots at distance zero."

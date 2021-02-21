@@ -232,9 +232,17 @@ function get_integer_points_with_coordinates(
 end
 
 
-is_necessary_halfspace(D,rr,r) = is_necessary_halfspace([D .* ro for ro in rr],D .* r)
+function is_necessary_halfspace(
+    D::SVector{rank,Int},
+    cone_roots::Vector{SVector{rank,Int}},
+    root::SVector{rank,Int},
+   ) where {rank}
 
-function is_necessary_halfspace(cone_roots::Vector{SVector{rank,Rat}},root::SVector{rank,Rat}) where {rank}
+    return is_necessary_halfspace([D .* cr for cr in cone_roots],D .* root)
+
+end
+
+function is_necessary_halfspace(cone_roots::Vector{SVector{rank,Int}},root::SVector{rank,Int}) where {rank}
 
 
     n = rank
@@ -267,13 +275,13 @@ function is_necessary_halfspace(cone_roots::Vector{SVector{rank,Rat}},root::SVec
 
 end
 
-
+#=
 function is_necessary_halfspace(cone_roots::Vector{SVector{rank,Int}},A::SMatrix{rank,rank,Int},root::SVector{rank,Int}) where {rank}
     
     return is_necessary_halfspace((r -> A*r).(cone_roots),A*root)
 
 end
-
+=#
 
 function Gram_to_Coxeter(G::Matrix{Int})
     # stolen from B&P

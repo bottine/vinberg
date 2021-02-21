@@ -8,6 +8,7 @@ import Base: vec, convert
 
 include("util.jl")
 
+ScaledInt = Int
 
 Rat = Rational{Int}
 
@@ -39,9 +40,10 @@ struct HyperbolicLattice{rank}
     Pinv::SMatrix{rank,rank,Rat}
     D::SVector{rank,Int}
     W::Vector{SVector{rank,Int}}
-    W_coordinates::Vector{SVector{rank,Rat}}
+    common_denominator::Int
+    W_coordinates::Vector{SVector{rank,ScaledInt}}
 
-    # Last invariant factor and possible root lengths.
+    # latast invariant factor and possible root lengths.
     last_invariant_factor::Int
     root_lengths::Vector{Int}
 end
@@ -83,8 +85,10 @@ function HyperbolicLattice(G)
     absdetP = Int(abs(det(Rational{Int}.(P))))
 
     W_,W_coordinates_ = get_integer_points_with_coordinates(P,absdetP)
-    W = Vector(W_) # coset representatives under "natural" coordinates
-    W_coordinates = Vector(W_coordinates_) # coset represnetative under "diagonal" coordinates
+    W = Vector{SVector{rank,Int}}(W_) # coset representatives under "natural" coordinates
+
+    common_denominator = lcm([lcm(denominator.(w)) for w in W_coordinates_])
+    W_coordinates = Vector{SVector{rank,Int}}([Int.(common_denominator*w) for w in W_coordinates_]) # coset represnetative under "diagonal" coordinates
 
     rG = Rational{Int}.(sG)
     cofactorsG = det(rG) * inv(rG) # 
@@ -101,6 +105,7 @@ function HyperbolicLattice(G)
         inv(Rat.(P)),
         D,
         W,
+        common_denominator,
         W_coordinates,
         last_invariant_factor,
         root_lengths
@@ -108,42 +113,50 @@ function HyperbolicLattice(G)
 end
 
 
+struct FixedDenom{denominator}
+    numerator::Int
+end
+
+function Base.:(+)(a::FixedDenom{d},b::FixedDenom{d}) where {d}
+    return FixedDenom{d}(a.numerator+b.numerator)
+end
+
 struct HyperbolicLatticeElement{rk}
-    L::HyperbolicLattice{rk}
-    diag_coordinates::SVector{rk,Rat}
+    lat::HyperbolicLattice{rk}
+    diag_coordinates::SVector{rk,ScaledInt} 
 end
 
-function Base.:(==)(L1::HyperbolicLattice,L2::HyperbolicLattice)
-    L1.G == L2.G
+function Base.:(==)(lat1::HyperbolicLattice,lat2::HyperbolicLattice)
+    lat1.G == lat2.G
 end
 
-function root_lengths(L::HyperbolicLattice)
-    return L.root_lengths
+function root_lengths(lat::HyperbolicLattice)
+    return lat.root_lengths
 end
 
 """
 The rank of the lattice.
 """
-function rk(L::HyperbolicLattice)
-    return L.r
+function rk(lat::HyperbolicLattice)
+    return lat.r
 end
 
 
-function v₀(L::HyperbolicLattice{rk}) where {rk}
-    return HyperbolicLatticeElement(L,SVector{rk,Rat}(vcat([1],[0 for i in 1:rk-1])))
+function v₀(lat::HyperbolicLattice{rk}) where {rk}
+    return HyperbolicLatticeElement(lat,SVector{rk,ScaledInt}(vcat([lat.common_denominator],[0 for i in 1:rk-1])))
 end
 
-function times_v₀(L::HyperbolicLattice,v::HyperbolicLatticeElement)
-    return L.D[1]*v.diag_coordinates[1]
+function times_v₀(lat::HyperbolicLattice,v::HyperbolicLatticeElement)::Int
+    return lat.D[1]*v.diag_coordinates[1]/lat.common_denominator
 end
 
 """
     Create a hyperbolic lattice element out of a lattice `L` and a vector `vec` by first converting `vec` to a `SVector`.
     Allows using the syntax `L(vec)`.
 """
-function (L::HyperbolicLattice)(vec)
-    svec = SVector{rk(L),Int}(vec)
-    HyperbolicLatticeElement(L,L.Pinv*svec)
+function (lat::HyperbolicLattice)(vec)
+    svec = SVector{rk(lat),Int}(vec)
+    HyperbolicLatticeElement(lat,Int.(lat.common_denominator*(lat.Pinv*svec)))
 end
 
 function Base.show(io::IO,v::HyperbolicLatticeElement) 
@@ -151,11 +164,23 @@ function Base.show(io::IO,v::HyperbolicLatticeElement)
 end
 
 function Base.isequal(v1::HyperbolicLatticeElement,v2::HyperbolicLatticeElement)
-    v1.L == v2.L && v1.diag_coordinates == v2.diag_coordinates
+    v1.lat == v2.lat && v1.diag_coordinates == v2.diag_coordinates
 end
 
 function Base.:(==)(v1::HyperbolicLatticeElement,v2::HyperbolicLatticeElement)
-    v1.L == v2.L && v1.diag_coordinates == v2.diag_coordinates
+    v1.lat == v2.lat && v1.diag_coordinates == v2.diag_coordinates
+end
+
+function diag_rep(v::HyperbolicLatticeElement)
+    return (v.diag_coordinates,v.lat.common_denominator)
+end
+
+function diag_rep_rational(v::HyperbolicLatticeElement)
+    return (1//lat.common_denominator) * diag_coordinates
+end
+
+function std_rep(v::HyperbolicLatticeElement{r})::SVector{r,Int} where {r}
+    return (v.lat.Pinv * v.diag_coordinates)//v.lat.common_denominator
 end
 
 """
@@ -165,11 +190,11 @@ Compute the inner_product of its two arguments in their common lattice.
 Obtained as `v' * G * w`.
 """
 function inner_product(v::HyperbolicLatticeElement,w::HyperbolicLatticeElement)::Int
-    @toggled_assert v.L == w.L "The elements must belong to the same lattice"
-    D = v.L.D
+    @toggled_assert v.lat == w.lat "The elements must belong to the same lattice"
+    D = v.lat.D
     vv = v.diag_coordinates
     ww = w.diag_coordinates
-    return Int(sum(vv .* D .*  ww))
+    return Int(sum(vv .* D .*  ww)/v.lat.common_denominator^2)
 end
 
 ⊙(v::HyperbolicLatticeElement,w::HyperbolicLatticeElement) = inner_product(v,w)
@@ -181,26 +206,26 @@ end
 """
     The standard basis of the lattice, that is, given by the vectors (1,0,…,0),…,(0,…,0,1,0…,0),…,(0,…,0,1).
 """
-function standard_basis(L::HyperbolicLattice)
-    return L.(SVector{rk(L),Int}.(collect(eachcol(I(rk(L))))))
+function standard_basis(lat::HyperbolicLattice)
+    return lat.(SVector{rk(lat),Int}.(collect(eachcol(I(rk(lat))))))
 end
 
 function Base.:-(v::HyperbolicLatticeElement) 
-    return HyperbolicLatticeElement(v.L,-v.diag_coordinates)
+    return HyperbolicLatticeElement(v.lat,-v.diag_coordinates)
 end 
 
 function Base.:+(v::HyperbolicLatticeElement,w::HyperbolicLatticeElement)
-    @toggled_assert v.L == w.L "The elements must belong to the same lattice"
-    return HyperbolicLatticeElement(v.L,v.diag_coordinates+w.diag_coordinates)
+    @toggled_assert v.lat == w.lat "The elements must belong to the same lattice"
+    return HyperbolicLatticeElement(v.lat,v.diag_coordinates+w.diag_coordinates)
 end 
 
 function Base.:-(v::HyperbolicLatticeElement,w::HyperbolicLatticeElement)
-    @toggled_assert v.L == w.L "The elements must belong to the same lattice"
+    @toggled_assert v.lat == w.lat "The elements must belong to the same lattice"
     return v + (-w) 
 end 
 
 function Base.:*(k::Int, v::HyperbolicLatticeElement)
-    return HyperbolicLatticeElement(v.L,k*v.diag_coordinates)
+    return HyperbolicLatticeElement(v.lat,k*v.diag_coordinates)
 end 
 
 function v₀_norm(lat::HyperbolicLattice)
@@ -219,7 +244,7 @@ Compute the label corresponding to the edge between the vertices corresponding t
 * TODO: probably deserves using `r₁_pp` and `r₂_pp` to skip matrix multiplications where possible.
 """
 function Coxeter_coeff(r₁::HyperbolicLatticeElement,r₂::HyperbolicLatticeElement)
-    @toggled_assert r₁.L == r₂.L "The elements must belong to the same lattice"
+    @toggled_assert r₁.lat == r₂.lat "The elements must belong to the same lattice"
     @toggled_assert is_root(r₁) && is_root(r₂) "The elements must be roots"
 
     angle = r₁⊙r₂
@@ -237,6 +262,9 @@ function Coxeter_coeff(r₁::HyperbolicLatticeElement,r₂::HyperbolicLatticeEle
     elseif cos² > 1
         return 1
     else
+        println("ERROR")
+        println("cos² is $cos²")
+        println("r₁ is $r₁ and r₂ is $r₂")
         return nothing
     end
 
@@ -246,8 +274,8 @@ end
 Ordering on `HyperboliclatticeElement` simply defined as the ordering on their representing vectors.
 """
 function Base.isless(v::HyperbolicLatticeElement, w::HyperbolicLatticeElement)
-    @toggled_assert v.L == w.L "The elements must belong to the same lattice"
-    return Base.isless(v.diag_coordinates,w.diag_coordinates)
+    @toggled_assert v.lat == w.lat "The elements must belong to the same lattice"
+    return Base.isless(vec(v),vec(w))
 end
 
 """
@@ -261,10 +289,10 @@ function crystallographic_condition(v::HyperbolicLatticeElement,norm_v::Int)
     @toggled_assert norm_v == norm(v)
 
     @toggled_assert iff(
-                        all(2*(e⊙v) % (v⊙v) == 0 for e in standard_basis(v.L)), 
-                        all(2*(row⋅vec(v)) % norm_v == 0 for row in eachrow(v.L.G))
+                        all(2*(e⊙v) % (v⊙v) == 0 for e in standard_basis(v.lat)), 
+                        all(2*(row⋅vec(v)) % norm_v == 0 for row in eachrow(v.lat.G))
                        ) "Optimized check for the crystallographic condition should be equivalent to the complete one."
-    return all( (((2*x) % norm_v) == 0)::Bool for x in v.L.G * vec(v) )
+    return all( (((2*x) % norm_v) == 0)::Bool for x in v.lat.G * vec(v) )
 
 end
 
@@ -302,7 +330,7 @@ function is_root(v::HyperbolicLatticeElement,norm_v::Int)::Bool
 
     # A root has length dividing twice the last invariant factor (see B&P) but 
     # this condition is actually not by definition, so we could skip it and get the same result afaik
-    norm_v ∉ v.L.root_lengths && return false
+    norm_v ∉ v.lat.root_lengths && return false
 
     # A root respects the crystallographic condition
     !crystallographic_condition(v,norm_v) && return false
@@ -315,29 +343,29 @@ function is_root(v::HyperbolicLatticeElement)::Bool
     return is_root(v,norm(v))
 end
 
-function vec(v::HyperbolicLatticeElement) 
-    return Int.(v.L.P*v.diag_coordinates) 
+function vec(v::HyperbolicLatticeElement)
+    return Int.(v.lat.P*v.diag_coordinates/v.lat.common_denominator) 
 end
 
 """
     fake_dist(VL,e) == (e⊙v₀)²//e⊙e
 
-where `VL::VinbergLattice` and `e::HyperbolicLatticeElement` is assumed to be a root.
+where `Vlat::VinbergLattice` and `e::HyperbolicLatticeElement` is assumed to be a root.
 The actual distance between the vector `v₀` and the hyperplane `e^⟂` in the hyperbolic space `ℍ^n` is monotonous with this "fake distance".
 We rather use the "fake distance" since it does not involve approximate computations.
 """
-function fake_dist(L::HyperbolicLattice,e::HyperbolicLatticeElement)
+function fake_dist(lat::HyperbolicLattice,e::HyperbolicLatticeElement)
 
     @toggled_assert is_root(e)
-    @toggled_assert e.L == L
-    @toggled_assert times_v₀(L,e)^2//(e⊙e) == (e⊙v₀(L))^2//(e⊙e)
+    @toggled_assert e.lat == lat
+    @toggled_assert times_v₀(lat,e)^2//(e⊙e) == (e⊙v₀(lat))^2//(e⊙e)
     
-    return times_v₀(L,e)^2//(e⊙e)
+    return times_v₀(lat,e)^2//(e⊙e)
 
 end
 
-function zero_elem(L::HyperbolicLattice)
-    HyperbolicLatticeElement(L,SVector{rk(L),Int}(zeros(rk(L))))
+function zero_elem(lat::HyperbolicLattice)
+    HyperbolicLatticeElement(lat,SVector{rk(lat),Int}(zeros(rk(lat))))
 end
 
 """
@@ -345,7 +373,7 @@ end
 """
 function reflection(r::HyperbolicLatticeElement,v::HyperbolicLatticeElement)
    
-    @toggled_assert v.L == r.L
+    @toggled_assert v.lat == r.lat
     @toggled_assert is_root(r)
 
     return v - (2*(r⊙v)/(r⊙r))*r
@@ -358,7 +386,7 @@ end
 """
 function sinh_distance_to_hyperplane(v::HyperbolicLatticeElement, e::HyperbolicLatticeElement)
     
-    @toggled_assert v.L == e.L
+    @toggled_assert v.lat == e.lat
     @toggled_assert is_root(e)
     
     return sqrt( - (e⊙v)^2 / ( norm(e)*norm(v) ) ) 

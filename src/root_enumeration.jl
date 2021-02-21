@@ -213,35 +213,30 @@ function roots_decomposed_into(lat::HyperbolicLattice, a::HyperbolicLatticeEleme
 
 @resumable function roots_decomposed_into(
     lat::HyperbolicLattice{r},
-    a₀::Int,
-    w::HyperbolicLatticeElement{r},
+    a::HyperbolicLatticeElement{r},
     k::Int,
     constraints=[],
-)::HyperbolicLatticeElement{r} where {r}
+)::HyperbolicLatticeElement{r}  where {r}
 
-    a = a₀*v₀(lat) + w
     
-    w_coordinate = lat.W_coordinates[findall(x->x==vec(w),lat.W)[1]]
-
-    M₁ = lat.P[:,2:end]
+    D = lat.D
     
-    println("All the constraints $constraints")
+    A = SVector{r-1,Int}(lat.common_denominator*popfirst(D))
+    b = SVector{r-1,Int}(Int.(2 * popfirst(a.diag_coordinates) .* popfirst(D)))
+    γ = lat.common_denominator * (a⊙a - k)
 
-    # Translate our problem into a positive definite quadratic equation, solvable by `qsolve()`
-    A = M₁' * lat.G * M₁
-    b = 2 *( M₁' * lat.G * vec(a))
-    γ = a⊙a - k
-  
-    sols = Vector{HyperbolicLatticeElement{r}}()
+    #sols = Vector{HyperbolicLatticeElement{r}}()
     # Finds solutions, translate them back to the lattice
-    for u in qsolve_diag_con(diag(A),b,γ,constraints)
-        uu = lat(M₁ * u + vec(a))
+    for u in qsolve_diag_con(A,b,γ,constraints)
+        uu = HyperbolicLatticeElement(lat,lat.common_denominator*pushfirst(u,0)) + a
         @toggled_assert norm(uu) == k  "``u⊙u`` must be equal to k"
         @toggled_assert (uu-a)⊙v₀(lat) == 0 "``u-a`` must lie in `V₁`"
         if is_root(uu,k)
             @yield uu 
+            #push!(sols,uu)
         end
     end
+    #return sols
 end
 
 
@@ -268,9 +263,12 @@ end
             break
         end
 
-        for (k,w,a) in current_patterns
-            constraints = [(root[2:end] .* D[2:end],-root⊙(a*w + v₀(lat))) for root in known_roots]
-            for root in roots_decomposed_into(lat,a,w,k,constraints)
+        for (k,w,a₀) in current_patterns
+            
+            a = a₀*v₀(lat) + w
+
+            constraints = [(root[2:end] .* D[2:end],-root⊙a * lat.common_denominator) for root in known_roots]
+            for root in roots_decomposed_into(lat,a,k,constraints)
                 @toggled_assert fake_dist(lat,root) == patterns.current_fake_dist
                 @yield root
             end
