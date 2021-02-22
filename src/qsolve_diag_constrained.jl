@@ -13,7 +13,15 @@ include("util.jl")
 
 Rat = Rational{Int}
 
-val(D,b,γ,z) = dot(z,diagm(D),z) + dot(b,z) + γ
+function val( # zDz + zb + γ with all of those with indices ranging from n to N
+    k::Int,
+    D::SVector{N},
+    b::SVector{N},
+    γ::Int,
+    z::SVector{N}
+   ) where {N} 
+    diag_product(k,z,D,z) + dot(k,b,z) + γ
+end
 
 function min_quad(
     a::Int,
@@ -27,14 +35,15 @@ function min_quad(
 end
 
 function min_quad(
-    D::SVector{n,Int},
-    b::SVector{n,Int},
+    k::Int,
+    D::SVector{N,Int},
+    b::SVector{N,Int},
     γ::Int,
-)::SVector{n,Rat} where {n}
+)::SVector{N-k+1,Rat} where {N}
 
     @toggled_assert all(d > 0 for d in D) 
-    min_point =  -(b .// (2*D))
-    @toggled_assert min_point == - (inv(diagm(Rat.(D)))*b)//2
+    min_point =  -(b[k:N] .// D[k:N]) //2
+    @toggled_assert min_point == - (inv(diagm(Rat.(D[k:N])))*b[k:N])//2
     return min_point
 end
 
@@ -85,60 +94,77 @@ function last_non_zero(v)
     return -1
 end
 
-@resumable function qsolve_diag_con(
-    D::SVector{n,Int},
-    b::SVector{n,Int},
+function unzip(pairs::Vector{Tuple{SVector{N,Int},Int}})::Tuple{Vector{SVector{N,Int}},Vector{Int}} where {N} 
+    return ([p[1] for p in pairs],[p[2] for p in pairs])
+end
+
+function qsolve_diag_con(
+    D::SVector{N,Int},
+    b::SVector{N,Int},
     γ::Int,
-    con#::Vector{Tuple{SVector{n,Int},Int}},
-)::SVector{n,Int} where {n}
+    constraints::Vector{Tuple{SVector{N,Int},Int}},
+)#=::SVector{N,Int}=#where {N}
 
-    con = [filter(x -> last_non_zero(x[1]) == i, con) for i in 1:n]
-    ccon = map(level -> Vector{AffineConstraint{n}}(map(c -> (SVector{length(c[1]),Int}(c[1]),c[2]), level)), con) 
-    
-    for s in qsolve_diag_constrained(SVector{n,Int}(D),SVector{n,Int}(b),γ,ccon)
-        @yield s
+    con = [filter(x -> last_non_zero(x[1]) == i, constraints) for i in 1:N]
+    ccon = [unzip(level) for level in con] 
+
+    sols = []
+
+    for s in qsolve_diag_constrained(1,D,b,γ,min_quad(1,D,b,γ),ccon)
+        #@yield s
+        push!(sols,s)
     end
-
+    return sols
 end
 
-AffineConstraint{N} = Tuple{SVector{N,Int},Int}
-# A pair vec, val representing the half-space {x: x⋅vec≤val}
 
-ConstraintsByLastNonZero{N} = Vector{Vector{AffineConstraint{N}}}
 
-satisfied(c::AffineConstraint) = c[2] ≥ 0
-
-function sub_first_in_constraint(
-    c::AffineConstraint{n},
-    x::Int
-)::AffineConstraint{n-1} where {n}
-    vec,val = c
-    return (popfirst(vec),val-vec[1]*x)
-end
-
-function sub_first_in_constraints(
-    constraints::ConstraintsByLastNonZero{n},
+function sub_kth_in_constraint(
+    k::Int,
     x::Int,
-)::Tuple{Bool,ConstraintsByLastNonZero{n-1}} where {n}
+    vec::SVector{N,Int},
+    val::Int
+)::Int where {N}
+    return val-vec[k]*x
+end
+
+function sub_kth_in_constraints(
+    k::Int,
+    x::Int,
+    vecs::Vector{SVector{N,Int}},
+    vals::Vector{Int}
+)::Vector{Int} where {N}
+    return [sub_kth_in_constraint(k,x,vec,val) for (vec,val) in zip(vecs,vals)]
+end
+
+function sub_kth_in_constraints(
+    k::Int,
+    x::Int,
+    constraints::Vector{Tuple{Vector{SVector{N,Int}},Vector{Int}}},
+)::Tuple{Bool,Vector{Tuple{Vector{SVector{N,Int}},Vector{Int}}}} where {N}
+
     level0 = constraints[1]
-    feasible = all([satisfied(sub_first_in_constraint(c,x)) for c in level0])
+    feasible = all([v ≥ 0 for v in sub_kth_in_constraints(k,x,level0[1],level0[2])])
     !feasible && return (feasible,[])
     
-    return (feasible, [map(c -> sub_first_in_constraint(c,x),level) for level in constraints[2:end]])
+    return (feasible, [(level[1],sub_kth_in_constraints(k,x,level[1],level[2])) for level in constraints[2:end]])
 
 end
 
-update_D_b_γ(D,b,γ,last_x) = (popfirst(D),popfirst(b),γ+D[1]*last_x^2 + last_x*b[1])
-matching_D_b_γ(D,b,γ,min_but) = (D[1],b[1],γ+diag_product(min_but,popfirst(D),min_but) + dot(min_but,b[2:end]))
+update_γ(k,D,b,γ,last_x) = γ+D[k]*last_x^2 + last_x*b[k]
+matching_D_b_γ(k,D,b,γ,min) = (D[k],b[k],γ+diag_product(k,min,D,min) + dot(k,min,b))
 
-@resumable function qsolve_diag_constrained(
-    D::SVector{n,Int},
-    b::SVector{n,Int},
+function qsolve_diag_constrained(
+    k::Int,
+    D::SVector{N,Int},
+    b::SVector{N,Int},
     γ::Int,
-    constraints::ConstraintsByLastNonZero{n},
+    min_point::SVector{N,Rat},
+    constraints::Vector{Tuple{Vector{SVector{N,Int}},Vector{Int}}},
     depth=0,
-)::SVector{n,Int} where {n}
-    
+)#=::SVector{N-k+1,Int}=# where {N}
+   
+    sols = []
     if any(length(level) > 0 for level in constraints)
         #println(" "^depth, "qsolve_diag_constrained:")   
         #println(" "^depth, "$D")   
@@ -152,35 +178,34 @@ matching_D_b_γ(D,b,γ,min_but) = (D[1],b[1],γ+diag_product(min_but,popfirst(D)
         end
     end
     @toggled_assert all(d > 0 for d in D) 
-   
+  
 
-    if n == 1
+    if k == N
     
-        candidate_sols = SVector{1,Int}.(int_solve_quadratic_poly(D[1],b[1],γ))
+        candidate_sols = SVector{1,Int}.(int_solve_quadratic_poly(D[k],b[k],γ))
         for s in candidate_sols
-            feasible, remaining = sub_first_in_constraints(constraints,s[1])
-            feasible && @yield s
+            feasible, remaining = sub_kth_in_constraints(k,s[1],constraints)
+            feasible && push!(sols,s) # @yield s
         end
 
     else
 
-        min_point = min_quad(D,b,γ) 
 
-        min_val = val(D,b,γ,min_point)
+        min_val = val(k,D,b,γ,min_point)
 
 
         if min_val ≤ 0
 
-            x_zeros = float_solve_quadratic_poly(matching_D_b_γ(D,b,γ,popfirst(min_point))...)
+            x_zeros = float_solve_quadratic_poly(matching_D_b_γ(k,D,b,γ,min_point)...)
             x_bottom = min(x_zeros...)
             x_top = max(x_zeros...)
 
             for x in Int(floor(x_bottom)):Int(ceil(x_top))
-                (feasible,updated) = sub_first_in_constraints(constraints,x)
+                (feasible,updated_cons) = sub_kth_in_constraints(k,x,constraints)
                 if feasible
-                    for sol_x in qsolve_diag_constrained(update_D_b_γ(D,b,γ,x)...,updated,depth+1)
+                    for sol_x in qsolve_diag_constrained(k+1,D,b,update_γ(k,D,b,γ,x),min_point,updated_cons,depth+1)
                         
-                        @yield pushfirst(sol_x,x)
+                        push!(sols,pushfirst(sol_x,x) )#@yield pushfirst(sol_x,x)
                     end
                 else
                     #println("---")
@@ -191,4 +216,5 @@ matching_D_b_γ(D,b,γ,min_but) = (D[1],b[1],γ+diag_product(min_but,popfirst(D)
         end
     end
 
+    return sols
 end
