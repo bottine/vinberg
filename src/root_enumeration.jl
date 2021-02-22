@@ -211,11 +211,20 @@ It suffices then to transform back
 """
 function roots_decomposed_into(lat::HyperbolicLattice, a::HyperbolicLatticeElement, k::Int) end
 
+function known_root_to_constraint(
+    root::HyperbolicLatticeElement{r},
+    a::HyperbolicLatticeElement{r},
+)::Tuple{SVector{r-1,Int},Int} where {r}
+    lat = root.lat
+    return (popfirst(root.diag_coordinates) .* popfirst(lat.D),-root⊙a * lat.common_denominator)   
+end
+
+
 @resumable function roots_decomposed_into(
     lat::HyperbolicLattice{r},
     a::HyperbolicLatticeElement{r},
     k::Int,
-    constraints=[],
+    known_roots::Vector{HyperbolicLatticeElement{r}}=Vector{HyperbolicLatticeElement{r}}(),
 )::HyperbolicLatticeElement{r}  where {r}
 
     
@@ -227,7 +236,7 @@ function roots_decomposed_into(lat::HyperbolicLattice, a::HyperbolicLatticeEleme
 
     #sols = Vector{HyperbolicLatticeElement{r}}()
     # Finds solutions, translate them back to the lattice
-    for u in qsolve_diag_con(A,b,γ,constraints)
+    for u in qsolve_diag_con(A,b,γ,[known_root_to_constraint(x,a) for x in known_roots])
         uu = HyperbolicLatticeElement(lat,lat.common_denominator*pushfirst(u,0)) + a
         @toggled_assert norm(uu) == k  "``u⊙u`` must be equal to k"
         @toggled_assert (uu-a)⊙v₀(lat) == 0 "``u-a`` must lie in `V₁`"
@@ -246,7 +255,7 @@ end
     lat::HyperbolicLattice{r},
     interval_lower_bound=(x->true), # must match a non-empty interval of positive numbers
     interval_upper_bound=(x->true),
-    known_roots=[],
+    known_roots::Vector{HyperbolicLatticeElement{r}}=Vector{HyperbolicLatticeElement{r}}(),
 ) :: HyperbolicLatticeElement{r} where {r} 
     
     patterns = RootDecompositionPatternsByDistance(lat)
@@ -267,8 +276,7 @@ end
             
             a = a₀*v₀(lat) + w
 
-            constraints = [(root[2:end] .* D[2:end],-root⊙a * lat.common_denominator) for root in known_roots]
-            for root in roots_decomposed_into(lat,a,k,constraints)
+            for root in roots_decomposed_into(lat,a,k,known_roots)
                 @toggled_assert fake_dist(lat,root) == patterns.current_fake_dist
                 @yield root
             end

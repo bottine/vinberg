@@ -144,7 +144,7 @@ function Vinberg_Algorithm(
     @info "Built the corresponding Coxeter diagram."
 
     round_num = 0 
-    for new_root in  roots_by_distance(lat,>(0),x->true,[])
+    for new_root in  roots_by_distance(lat,>(0),x->true,roots)
 
         !isnothing(rounds) && round_num ≥ rounds && break 
         round_num += 1
