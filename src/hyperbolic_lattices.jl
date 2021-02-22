@@ -194,7 +194,7 @@ function inner_product(v::HyperbolicLatticeElement,w::HyperbolicLatticeElement):
     D = v.lat.D
     vv = v.diag_coordinates
     ww = w.diag_coordinates
-    return Int(sum(vv .* D .*  ww)/v.lat.common_denominator^2)
+    return Int(diag_product(vv, D, ww)/v.lat.common_denominator^2)
 end
 
 ⊙(v::HyperbolicLatticeElement,w::HyperbolicLatticeElement) = inner_product(v,w)

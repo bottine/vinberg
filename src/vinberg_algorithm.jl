@@ -192,4 +192,11 @@ function Vinberg_Algorithm(
 
 end
 
+function Vinberg_Algorithm(
+    G,
+    rounds=nothing
+) where {n}
+    return Vinberg_Algorithm(HyperbolicLattice(G),rounds=rounds)
+end
+
 

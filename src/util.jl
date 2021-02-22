@@ -16,6 +16,15 @@ Rat = Rational{Int}
 
 iff(a::Bool,b::Bool) = a&&b || (!a)&&(!b)
 
+function diag_product(x::SVector{n},y::SVector{n},z::SVector{n}) where {n}
+    val = 0
+    for i in 1:n
+       val += x[i]*y[i]*z[i]
+    end
+    return val
+end
+
+
 function signature(G)
     
     D,P = diagonalize(G)

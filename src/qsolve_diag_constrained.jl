@@ -129,7 +129,7 @@ function sub_first_in_constraints(
 end
 
 update_D_b_γ(D,b,γ,last_x) = (popfirst(D),popfirst(b),γ+D[1]*last_x^2 + last_x*b[1])
-matching_D_b_γ(D,b,γ,min_but) = (D[1],b[1],γ+dot(min_but,diagm(D[2:end]),min_but) + dot(min_but,b[2:end]))
+matching_D_b_γ(D,b,γ,min_but) = (D[1],b[1],γ+diag_product(min_but,popfirst(D),min_but) + dot(min_but,b[2:end]))
 
 @resumable function qsolve_diag_constrained(
     D::SVector{n,Int},
@@ -171,7 +171,7 @@ matching_D_b_γ(D,b,γ,min_but) = (D[1],b[1],γ+dot(min_but,diagm(D[2:end]),min_
 
         if min_val ≤ 0
 
-            x_zeros = float_solve_quadratic_poly(matching_D_b_γ(D,b,γ,min_point[2:end])...)
+            x_zeros = float_solve_quadratic_poly(matching_D_b_γ(D,b,γ,popfirst(min_point))...)
             x_bottom = min(x_zeros...)
             x_top = max(x_zeros...)
 
