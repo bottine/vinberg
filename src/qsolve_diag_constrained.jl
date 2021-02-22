@@ -103,13 +103,13 @@ end
     b::SVector{N,Int},
     γ::Int,
     constraints::Vector{Tuple{SVector{N,Int},Int}},
-)#=::SVector{N,Int}=#where {N}
+)::SVector{N,Int} where {N}
 
     con = [filter(x -> last_non_zero(x[1]) == i, constraints) for i in 1:N]
     ccon = [unzip(level) for level in con] 
 
 
-    for s in qsolve_diag_constrained(1,D,b,γ,min_quad(1,D,b,γ),ccon)
+    for s in qsolve_diag_constrained(SVector{0,Int}(),D,b,γ,min_quad(1,D,b,γ),ccon)
         @yield s
     end
 
@@ -153,28 +153,16 @@ update_γ(k,D,b,γ,last_x) = γ+D[k]*last_x^2 + last_x*b[k]
 matching_D_b_γ(k,D,b,γ,min) = (D[k],b[k],γ+diag_product(k,min,D,min) + dot(k,min,b))
 
 @resumable function qsolve_diag_constrained(
-    k::Int,
+    prefix::SVector{k_minus_one,Int},
     D::SVector{N,Int},
     b::SVector{N,Int},
     γ::Int,
     min_point::SVector{N,Rat},
     constraints::Vector{Tuple{Vector{SVector{N,Int}},Vector{Int}}},
     depth=0,
-)#=::SVector{N-k+1,Int}=# where {N}
-   
-    #sols = []
-    if any(length(level) > 0 for level in constraints)
-        #println(" "^depth, "qsolve_diag_constrained:")   
-        #println(" "^depth, "$D")   
-        #println(" "^depth, "$b")   
-        #println(" "^depth, "$γ")
-        for level in constraints
-            for c in level
-                #println(" "^depth, c)  
-            end
-            #println(" "^depth, "---------------------------------------------------")
-        end
-    end
+)::SVector{N,Int} where {k_minus_one,N}
+    
+    k = k_minus_one + 1
     @toggled_assert all(d > 0 for d in D) 
   
 
@@ -183,7 +171,7 @@ matching_D_b_γ(k,D,b,γ,min) = (D[k],b[k],γ+diag_product(k,min,D,min) + dot(k,
         candidate_sols = SVector{1,Int}.(int_solve_quadratic_poly(D[k],b[k],γ))
         for s in candidate_sols
             feasible, remaining = sub_kth_in_constraints(k,s[1],constraints)
-            feasible && @yield s
+            feasible && @yield vcat(prefix,s)
         end
 
     else
@@ -201,12 +189,12 @@ matching_D_b_γ(k,D,b,γ,min) = (D[k],b[k],γ+diag_product(k,min,D,min) + dot(k,
             for x in Int(floor(x_bottom)):Int(ceil(x_top))
                 (feasible,updated_cons) = sub_kth_in_constraints(k,x,constraints)
                 if feasible
-                    for sol_x in qsolve_diag_constrained(k+1,D,b,update_γ(k,D,b,γ,x),min_point,updated_cons,depth+1)
+                    for sol_x in qsolve_diag_constrained(push(prefix,x),D,b,update_γ(k,D,b,γ,x),min_point,updated_cons,depth+1)
                         
-                        @yield pushfirst(sol_x,x)
+                        @yield sol_x 
                     end
                 else
-                    println("bad at ($k over $N)")
+                
                 end
             
 
