@@ -98,7 +98,7 @@ function unzip(pairs::Vector{Tuple{SVector{N,Int},Int}})::Tuple{Vector{SVector{N
     return ([p[1] for p in pairs],[p[2] for p in pairs])
 end
 
-function qsolve_diag_con(
+@resumable function qsolve_diag_con(
     D::SVector{N,Int},
     b::SVector{N,Int},
     γ::Int,
@@ -108,13 +108,11 @@ function qsolve_diag_con(
     con = [filter(x -> last_non_zero(x[1]) == i, constraints) for i in 1:N]
     ccon = [unzip(level) for level in con] 
 
-    sols = []
 
     for s in qsolve_diag_constrained(1,D,b,γ,min_quad(1,D,b,γ),ccon)
-        #@yield s
-        push!(sols,s)
+        @yield s
     end
-    return sols
+
 end
 
 
@@ -154,7 +152,7 @@ end
 update_γ(k,D,b,γ,last_x) = γ+D[k]*last_x^2 + last_x*b[k]
 matching_D_b_γ(k,D,b,γ,min) = (D[k],b[k],γ+diag_product(k,min,D,min) + dot(k,min,b))
 
-function qsolve_diag_constrained(
+@resumable function qsolve_diag_constrained(
     k::Int,
     D::SVector{N,Int},
     b::SVector{N,Int},
@@ -164,7 +162,7 @@ function qsolve_diag_constrained(
     depth=0,
 )#=::SVector{N-k+1,Int}=# where {N}
    
-    sols = []
+    #sols = []
     if any(length(level) > 0 for level in constraints)
         #println(" "^depth, "qsolve_diag_constrained:")   
         #println(" "^depth, "$D")   
@@ -185,7 +183,7 @@ function qsolve_diag_constrained(
         candidate_sols = SVector{1,Int}.(int_solve_quadratic_poly(D[k],b[k],γ))
         for s in candidate_sols
             feasible, remaining = sub_kth_in_constraints(k,s[1],constraints)
-            feasible && push!(sols,s) # @yield s
+            feasible && @yield s
         end
 
     else
@@ -205,10 +203,10 @@ function qsolve_diag_constrained(
                 if feasible
                     for sol_x in qsolve_diag_constrained(k+1,D,b,update_γ(k,D,b,γ,x),min_point,updated_cons,depth+1)
                         
-                        push!(sols,pushfirst(sol_x,x) )#@yield pushfirst(sol_x,x)
+                        @yield pushfirst(sol_x,x)
                     end
                 else
-                    #println("---")
+                    println("bad at ($k over $N)")
                 end
             
 
@@ -216,5 +214,4 @@ function qsolve_diag_constrained(
         end
     end
 
-    return sols
 end
