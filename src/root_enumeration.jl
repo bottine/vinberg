@@ -227,25 +227,23 @@ end
     known_roots::Vector{HyperbolicLatticeElement{r}}=Vector{HyperbolicLatticeElement{r}}(),
 )::HyperbolicLatticeElement{r}  where {r}
 
-    
+    constraints = [known_root_to_constraint(x,a) for x in known_roots]
+
     D = lat.D
     
     A = SVector{r-1,Int}(lat.common_denominator*popfirst(D))
     b = SVector{r-1,Int}(Int.(2 * popfirst(a.diag_coordinates) .* popfirst(D)))
     γ = lat.common_denominator * (a⊙a - k)
 
-    #sols = Vector{HyperbolicLatticeElement{r}}()
     # Finds solutions, translate them back to the lattice
-    for u in qsolve_diag_con(A,b,γ,[known_root_to_constraint(x,a) for x in known_roots])
+    for u in qsolve_diag_con(A,b,γ,constraints)
         uu = HyperbolicLatticeElement(lat,lat.common_denominator*pushfirst(u,0)) + a
         @toggled_assert norm(uu) == k  "``u⊙u`` must be equal to k"
         @toggled_assert (uu-a)⊙v₀(lat) == 0 "``u-a`` must lie in `V₁`"
         if is_root(uu,k)
             @yield uu 
-            #push!(sols,uu)
         end
     end
-    #return sols
 end
 
 
@@ -260,6 +258,7 @@ end
     
     patterns = RootDecompositionPatternsByDistance(lat)
 
+    known_roots = copy(known_roots)
 
     while true
         
@@ -275,10 +274,13 @@ end
         for (k,w,a₀) in current_patterns
             
             a = a₀*v₀(lat) + w
-
+            new_roots = nothing
             for root in roots_decomposed_into(lat,a,k,known_roots)
                 @toggled_assert fake_dist(lat,root) == patterns.current_fake_dist
-                @yield root
+                new_roots = @yield root
+                if !isnothing(new_roots)
+                    append!(known_roots,new_roots)
+                end
             end
         end
     end

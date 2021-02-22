@@ -143,8 +143,15 @@ function Vinberg_Algorithm(
     diagram = build_diagram_and_subs(Coxeter_matrix,n-1)
     @info "Built the corresponding Coxeter diagram."
 
-    round_num = 0 
-    for new_root in  roots_by_distance(lat,>(0),x->true,roots)
+    round_num = 0
+
+    roots_by_distance_iter = roots_by_distance(lat,>(0),x->true,roots)
+
+    new_roots = nothing # those are fed to the iterator 
+    while true
+   
+        new_root = roots_by_distance_iter(new_roots) 
+        new_roots = nothing # those are fed to the iterator 
 
         !isnothing(rounds) && round_num ≥ rounds && break 
         round_num += 1
@@ -167,7 +174,7 @@ function Vinberg_Algorithm(
             # new_root now satisfies all the requirements to be added to our set of roots.
             extend!(diagram,[Coxeter_coeff(r,new_root) for r in roots])
             push!(roots,new_root)
-
+            new_roots = [new_root]
 
             @info "Found new satisfying root: $new_root."
             if is_finite_volume(diagram)

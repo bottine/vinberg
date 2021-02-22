@@ -32,8 +32,8 @@ function min_quad(
     γ::Int,
 )::SVector{n,Rat} where {n}
 
-    @assert all(d > 0 for d in D) 
-    min_point = SVector{n,Rat}([min_quad(d,b,γ) for (d,b) in zip(D,b)])
+    @toggled_assert all(d > 0 for d in D) 
+    min_point =  -(b .// (2*D))
     @toggled_assert min_point == - (inv(diagm(Rat.(D)))*b)//2
     return min_point
 end
@@ -101,10 +101,10 @@ end
 
 end
 
-AffineConstraint{n} = Tuple{SVector{n,Int},Int}
+AffineConstraint{N} = Tuple{SVector{N,Int},Int}
 # A pair vec, val representing the half-space {x: x⋅vec≤val}
 
-ConstraintsByLastNonZero{n} = Vector{Vector{AffineConstraint{n}}}
+ConstraintsByLastNonZero{N} = Vector{Vector{AffineConstraint{N}}}
 
 satisfied(c::AffineConstraint) = c[2] ≥ 0
 
