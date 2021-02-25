@@ -192,16 +192,14 @@ matching_D_b_γ(k,D,b,γ,min) = (D[k],b[k],γ+diag_product(k,min,D,min) + dot(k,
 
             for x in Int(floor(x_bottom)):Int(ceil(x_top))
                 (feasible,updated_cons) = sub_kth_in_constraints(k,x,constraints)
-                #if  Int(2*(x*D[k] + w_diag[k]*D[k]//common_denom)//common_denom) % the_norm ≠ 0
-                #    @info "norm = $the_norm, common_denom = $common_denom, D = $D, w_diag = $w_diag, n = $k $x does not seem possible" 
-                #end
+               
                 if feasible && Int(2*(x*D[k] + w_diag[k]*D[k]//common_denom)//common_denom) % the_norm == 0
                     for sol_x in qsolve_diag_constrained(push(prefix,x),D,b,update_γ(k,D,b,γ,x),min_point,updated_cons,the_norm,w_diag,common_denom,depth+1)
                         
                         @yield sol_x 
                     end
                 else
-                
+                    # not interested, thanks 
                 end
             
 
