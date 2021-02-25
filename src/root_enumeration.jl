@@ -214,7 +214,7 @@ function roots_decomposed_into(lat::HyperbolicLattice, a::HyperbolicLatticeEleme
 function known_root_to_constraint(
     root::HyperbolicLatticeElement{r},
     a::HyperbolicLatticeElement{r},
-)::Tuple{SVector{r-1,Int},Int} where {r}
+)::Tuple{SizedVector{r-1,Int},Int} where {r}
     lat = root.lat
     return (popfirst(root.diag_coordinates) .* popfirst(lat.D),-root⊙a * lat.common_denominator)   
 end
@@ -232,12 +232,12 @@ end
 
     D = lat.D
     
-    A = SVector{r-1,Int}(lat.common_denominator*popfirst(D))
-    b = SVector{r-1,Int}(Int.(2 * popfirst(a.diag_coordinates) .* popfirst(D)))
+    A = SizedVector{r-1,Int}(lat.common_denominator*popfirst(D))
+    b = SizedVector{r-1,Int}(Int.(2 * popfirst(a.diag_coordinates) .* popfirst(D)))
     γ = lat.common_denominator * (a⊙a - k)
 
     # Finds solutions, translate them back to the lattice
-    for u in qsolve_diag_con(A,b,γ,constraints,k,popfirst(w.diag_coordinates),lat.common_denominator)
+    for u in qsolve_diag_con(A,b,γ,Vector{Tuple{SizedVector{r-1,Int},Int}}(constraints),k,popfirst(w.diag_coordinates),lat.common_denominator)
         uu = HyperbolicLatticeElement(lat,lat.common_denominator*pushfirst(u,0)) + a
         @toggled_assert norm(uu) == k  "``u⊙u`` must be equal to k"
         @toggled_assert (uu-a)⊙v₀(lat) == 0 "``u-a`` must lie in `V₁`"
