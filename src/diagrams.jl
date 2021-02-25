@@ -28,18 +28,18 @@ include("coxiter_io.jl")
 # connected = irreducible
 # We store the vertices and the type
 struct ConnectedInducedSubDiagram
-    vertices::SBitSet{4}
+    vertices::SBitSet{1}
     type::DiagramType
 end
 function Base.:(==)(c1::ConnectedInducedSubDiagram,c2::ConnectedInducedSubDiagram)
     (c1.vertices == c2.vertices)
 end
 
-function CISD(vertices::SBitSet{4},type)
+function CISD(vertices::SBitSet{1},type)
     ConnectedInducedSubDiagram(vertices,type)
 end
 function CISD(vertices::Array{Int,1},type)
-    ConnectedInducedSubDiagram(SBitSet{4}(vertices),type)
+    ConnectedInducedSubDiagram(SBitSet{1}(vertices),type)
 end
 
 function Base.copy(c::ConnectedInducedSubDiagram)
@@ -50,7 +50,7 @@ card(c::ConnectedInducedSubDiagram) = length(c.vertices)
 
 is_empty(c::ConnectedInducedSubDiagram) = isempty(c.vertices)
 
-the_singleton(v::Int) = CISD(SBitSet{4}(v),DT_a)
+the_singleton(v::Int) = CISD(SBitSet{1}(v),DT_a)
 
 
 # An arbitrary induced subdiagram
@@ -105,10 +105,10 @@ end
 mutable struct DiagramAndSubs 
     D::Array{Int,(2)}
     d::Int # = dimension
-    subs::Vector{Tuple{SBitSet{4},InducedSubDiagram}}
-    spherical_subs_rank_d_minus_1::Vector{Tuple{SBitSet{4},InducedSubDiagram}}
-    spherical_subs_rank_d::Vector{Tuple{SBitSet{4},InducedSubDiagram}}
-    affine_subs_rank_d_minus_1::Vector{Tuple{SBitSet{4},InducedSubDiagram}}
+    subs::Vector{Tuple{SBitSet{1},InducedSubDiagram}}
+    spherical_subs_rank_d_minus_1::Vector{Tuple{SBitSet{1},InducedSubDiagram}}
+    spherical_subs_rank_d::Vector{Tuple{SBitSet{1},InducedSubDiagram}}
+    affine_subs_rank_d_minus_1::Vector{Tuple{SBitSet{1},InducedSubDiagram}}
 end
 
 
@@ -116,7 +116,7 @@ end
 
 function dump_das(das::DiagramAndSubs;range=nothing)
    
-    dense_bitset_str(b::SBitSet{4}) = *("[",[string(i)*"," for i in b]...,"]")
+    dense_bitset_str(b::SBitSet{1}) = *("[",[string(i)*"," for i in b]...,"]")
 
     println("### Subdiagrams for Coxeter matrix:")
     display(das.D)
@@ -147,7 +147,7 @@ function is_compact(das::DiagramAndSubs)
     # The dimension is the rank
     #
 
-    dense_bitset_str(b::SBitSet{4}) = *("[",[string(i)*"," for i in b]...,"]")
+    dense_bitset_str(b::SBitSet{1}) = *("[",[string(i)*"," for i in b]...,"]")
    
     if isempty(das.spherical_subs_rank_d)
         return false
@@ -182,7 +182,7 @@ end
 function is_finite_volume(das::DiagramAndSubs)
 
     
-    dense_bitset_str(b::SBitSet{4}) = *("[",[string(i)*"," for i in b]...,"]")
+    dense_bitset_str(b::SBitSet{1}) = *("[",[string(i)*"," for i in b]...,"]")
     
     if isempty(das.spherical_subs_rank_d) && isempty(das.affine_subs_rank_d_minus_1)
         return false
@@ -225,7 +225,7 @@ function is_compact_finite_volume(das::DiagramAndSubs)
     
     compact = true
     fin_vol = true
-    dense_bitset_str(b::SBitSet{4}) = *("[",[string(i)*"," for i in b]...,"]")
+    dense_bitset_str(b::SBitSet{1}) = *("[",[string(i)*"," for i in b]...,"]")
     
     if isempty(das.spherical_subs_rank_d)
         compact = false
@@ -268,12 +268,12 @@ end
 
 
 # dirty hack to memoize `connected_diagram_type` only on its first argument
-Arg = Tuple{SBitSet{4},Array{Int,2},Bool}
+Arg = Tuple{SBitSet{1},Array{Int,2},Bool}
 Base.hash(a::Arg, h::UInt) = hash(a[1], hash(:Arg, h))
 Base.isequal(a::Arg, b::Arg) = Base.isequal(hash(a), hash(b))
 
 
-@memoize Dict function connected_diagram_type(VS::SBitSet{4},D::Array{Int,2}; only_sporadic::Bool=false)
+@memoize Dict function connected_diagram_type(VS::SBitSet{1},D::Array{Int,2}; only_sporadic::Bool=false)
     
     @assert true "The diagram here is assumed connected. maybe this deserves a check"
 
@@ -298,7 +298,7 @@ Base.isequal(a::Arg, b::Arg) = Base.isequal(hash(a), hash(b))
     return joined
 end
 
-@inline function build_deg_seq_and_associated_data(VS::SBitSet{4},D::Array{Int,2})
+@inline function build_deg_seq_and_associated_data(VS::SBitSet{1},D::Array{Int,2})
 
     
     @assert true "The diagram here is assumed connected. maybe this deserves a check"
@@ -308,10 +308,10 @@ end
 
     VSC = length(VS)
    
-    deg1 = SBitSet{4}()
-    deg1_neigh = SBitSet{4}()
-    deg3 = SBitSet{4}()
-    deg3_neigh = SBitSet{4}()
+    deg1 = SBitSet{1}()
+    deg1_neigh = SBitSet{1}()
+    deg3 = SBitSet{1}()
+    deg3_neigh = SBitSet{1}()
 
     deg_seqs::GenDegSeq = GenDegSeq(Vector{GenDeg}()) 
     for v in VS
@@ -319,10 +319,10 @@ end
         @debug "looking at $v"
 
         deg_v = empty_deg 
-        simple_neighbors_v = SBitSet{4}()
+        simple_neighbors_v = SBitSet{1}()
         for u in VS if u ≠ v
             if D[u,v] == 3
-                simple_neighbors_v = simple_neighbors_v | SBitSet{4}(u)
+                simple_neighbors_v = simple_neighbors_v | SBitSet{1}(u)
             end
             if D[u,v] ≠ 2
                 deg_v = push_label(deg_v,D[u,v])
@@ -332,10 +332,10 @@ end
             end
         end end
         if deg_v == short_vec_to_deg([3,3,3])
-            deg3 = deg3 | SBitSet{4}(v)
+            deg3 = deg3 | SBitSet{1}(v)
             deg3_neigh = deg3_neigh | simple_neighbors_v
         elseif deg_v == short_vec_to_deg([3])
-            deg1 = deg1 | SBitSet{4}(v)
+            deg1 = deg1 | SBitSet{1}(v)
             deg1_neigh = deg1_neigh | simple_neighbors_v
         end
         # TODO add early exits here
@@ -351,16 +351,16 @@ end
     @debug "end of build_deg_seq…"
 
 
-    center::SBitSet{4} = deg3
-    center_neighbors::SBitSet{4} = deg3_neigh 
-    extremities::SBitSet{4} = deg1 
-    extremities_neighbors::SBitSet{4} = deg1_neigh 
+    center::SBitSet{1} = deg3
+    center_neighbors::SBitSet{1} = deg3_neigh 
+    extremities::SBitSet{1} = deg1 
+    extremities_neighbors::SBitSet{1} = deg1_neigh 
     
     return (ds, deg1, deg1_neigh, deg3, deg3_neigh)
 
 end
 
-@inline function connected_non_sporadic_diagram_type(VS::SBitSet{4},D::Array{Int,2},deg_seq_and_assoc)
+@inline function connected_non_sporadic_diagram_type(VS::SBitSet{1},D::Array{Int,2},deg_seq_and_assoc)
     
     @assert true "The diagram here is assumed connected. maybe this deserves a check"
     
@@ -409,7 +409,7 @@ end
     end    
 end
 
-@inline function connected_sporadic_diagram_type(VS::SBitSet{4},D::Array{Int,2},deg_seq_and_assoc)
+@inline function connected_sporadic_diagram_type(VS::SBitSet{1},D::Array{Int,2},deg_seq_and_assoc)
 
     @assert true "The diagram here is assumed connected. maybe this deserves a check"
 
@@ -463,7 +463,7 @@ end
 
 end
 
-function try_extend(VS::SBitSet{4},S::InducedSubDiagram,D::Array{Int,2},v::Int)::Union{Nothing,InducedSubDiagram}
+function try_extend(VS::SBitSet{1},S::InducedSubDiagram,D::Array{Int,2},v::Int)::Union{Nothing,InducedSubDiagram}
    
    
 
@@ -476,7 +476,7 @@ function try_extend(VS::SBitSet{4},S::InducedSubDiagram,D::Array{Int,2},v::Int):
     
     # joined should/will be of type ConnectedInducedSubDiagram
     joined = nothing # Here is the result
-    joined_vertices::SBitSet{4} = SBitSet{4}(v)
+    joined_vertices::SBitSet{1} = SBitSet{1}(v)
 
     components = copy(S.connected_components)
     
@@ -554,10 +554,10 @@ function extend!(das::DiagramAndSubs, v::Array{Int,1})
     das.D = [das.D; [v;1]']
    
     new_vertex = n+1
-    singleton_v = SBitSet{4}(new_vertex)
+    singleton_v = SBitSet{1}(new_vertex)
 
     #= Can't be more efficient it seems
-    @inline function extend_one(supsub::Tuple{SBitSet{4},InducedSubDiagram})
+    @inline function extend_one(supsub::Tuple{SBitSet{1},InducedSubDiagram})
         sup,sub = supsub
         res = try_extend(sup,sub,das.D,new_vertex)
         if res ≠ nothing
@@ -575,12 +575,12 @@ function extend!(das::DiagramAndSubs, v::Array{Int,1})
             return nothing
         end
     end
-    new_subs::Vector{Tuple{SBitSet{4},InducedSubDiagram}} =filter(x -> !isnothing(x),extend_one.(das.subs))
+    new_subs::Vector{Tuple{SBitSet{1},InducedSubDiagram}} =filter(x -> !isnothing(x),extend_one.(das.subs))
     append!(das.subs,new_subs)
     sizehint!(das.subs,length(das.subs)*2)
     =#
     
-    #new_subs::Vector{Tuple{SBitSet{4},InducedSubDiagram}} = sizehint!([],length(das.subs)) 
+    #new_subs::Vector{Tuple{SBitSet{1},InducedSubDiagram}} = sizehint!([],length(das.subs)) 
     #sizehint!(das.subs,length(das.subs)*2)
     len = length(das.subs)
     i = len+1
@@ -619,8 +619,8 @@ function build_diagram_and_subs(M::Array{Int,2},dimension::Int)
     @assert M == M' "M must be symmetric"
     @assert all(l ≥ 0 for l in M) "M must have non-negative entries"
 
-    subs = Vector{Tuple{SBitSet{4},InducedSubDiagram}}([])
-    push!(subs,(SBitSet{4}(), the_empty_isd()))
+    subs = Vector{Tuple{SBitSet{1},InducedSubDiagram}}([])
+    push!(subs,(SBitSet{1}(), the_empty_isd()))
 
     das = DiagramAndSubs(reshape([],0,0),dimension,subs,[],[],[])
     for i in 1:n

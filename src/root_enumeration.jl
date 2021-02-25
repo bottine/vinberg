@@ -223,6 +223,7 @@ end
 @resumable function roots_decomposed_into(
     lat::HyperbolicLattice{r},
     a::HyperbolicLatticeElement{r},
+    w::HyperbolicLatticeElement{r},
     k::Int,
     known_roots::Vector{HyperbolicLatticeElement{r}}=Vector{HyperbolicLatticeElement{r}}(),
 )::HyperbolicLatticeElement{r}  where {r}
@@ -236,7 +237,7 @@ end
     γ = lat.common_denominator * (a⊙a - k)
 
     # Finds solutions, translate them back to the lattice
-    for u in qsolve_diag_con(A,b,γ,constraints)
+    for u in qsolve_diag_con(A,b,γ,constraints,k,popfirst(w.diag_coordinates),lat.common_denominator)
         uu = HyperbolicLatticeElement(lat,lat.common_denominator*pushfirst(u,0)) + a
         @toggled_assert norm(uu) == k  "``u⊙u`` must be equal to k"
         @toggled_assert (uu-a)⊙v₀(lat) == 0 "``u-a`` must lie in `V₁`"
@@ -274,9 +275,20 @@ end
         for (k,w,a₀) in current_patterns
             
             a = a₀*v₀(lat) + w
+            
+            unlikely_root = false
+            lol1 = 2*a ⊙ v₀(lat)
+            lol2 = Int(2*(a₀*lat.D[1] + w.diag_coordinates[1]*lat.D[1]//lat.common_denominator))
+            @assert lol1 == lol2 "$lol1 vs $lol2" 
+            if lol2 % k ≠ 0
+                unlikely_root = true
+            end
             new_roots = nothing
-            for root in roots_decomposed_into(lat,a,k,known_roots)
+            for root in roots_decomposed_into(lat,a,w,k,known_roots)
                 @toggled_assert fake_dist(lat,root) == patterns.current_fake_dist
+                if unlikely_root 
+                    @info "$root is unlikely, but is it? (a₀ = $a₀, w = $w, k = $k)"
+                end
                 new_roots = @yield root
                 if !isnothing(new_roots)
                     append!(known_roots,new_roots)

@@ -103,13 +103,16 @@ end
     b::SVector{N,Int},
     γ::Int,
     constraints::Vector{Tuple{SVector{N,Int},Int}},
+    the_norm::Int,
+    w_diag::SVector{N,Int},
+    common_denom::Int,
 )::SVector{N,Int} where {N}
 
     con = [filter(x -> last_non_zero(x[1]) == i, constraints) for i in 1:N]
     ccon = [unzip(level) for level in con] 
 
 
-    for s in qsolve_diag_constrained(SVector{0,Int}(),D,b,γ,min_quad(1,D,b,γ),ccon)
+    for s in qsolve_diag_constrained(SVector{0,Int}(),D,b,γ,min_quad(1,D,b,γ),ccon,the_norm,w_diag,common_denom)
         @yield s
     end
 
@@ -159,6 +162,9 @@ matching_D_b_γ(k,D,b,γ,min) = (D[k],b[k],γ+diag_product(k,min,D,min) + dot(k,
     γ::Int,
     min_point::SVector{N,Rat},
     constraints::Vector{Tuple{Vector{SVector{N,Int}},Vector{Int}}},
+    the_norm::Int,
+    w_diag::SVector{N,Int},
+    common_denom::Int,
     depth=0,
 )::SVector{N,Int} where {k_minus_one,N}
     
@@ -176,9 +182,7 @@ matching_D_b_γ(k,D,b,γ,min) = (D[k],b[k],γ+diag_product(k,min,D,min) + dot(k,
 
     else
 
-
         min_val = val(k,D,b,γ,min_point)
-
 
         if min_val ≤ 0
 
@@ -188,8 +192,11 @@ matching_D_b_γ(k,D,b,γ,min) = (D[k],b[k],γ+diag_product(k,min,D,min) + dot(k,
 
             for x in Int(floor(x_bottom)):Int(ceil(x_top))
                 (feasible,updated_cons) = sub_kth_in_constraints(k,x,constraints)
-                if feasible
-                    for sol_x in qsolve_diag_constrained(push(prefix,x),D,b,update_γ(k,D,b,γ,x),min_point,updated_cons,depth+1)
+                #if  Int(2*(x*D[k] + w_diag[k]*D[k]//common_denom)//common_denom) % the_norm ≠ 0
+                #    @info "norm = $the_norm, common_denom = $common_denom, D = $D, w_diag = $w_diag, n = $k $x does not seem possible" 
+                #end
+                if feasible && Int(2*(x*D[k] + w_diag[k]*D[k]//common_denom)//common_denom) % the_norm == 0
+                    for sol_x in qsolve_diag_constrained(push(prefix,x),D,b,update_γ(k,D,b,γ,x),min_point,updated_cons,the_norm,w_diag,common_denom,depth+1)
                         
                         @yield sol_x 
                     end

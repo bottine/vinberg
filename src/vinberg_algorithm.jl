@@ -116,9 +116,9 @@ end
 Run the Vinberg algorithm on the lattice ``lat`` with basepoint ``lat.v₀`` until `rounds` roots have been considered (if `rounds=nothing`, then the algorithm runs indefinitely long).
 """
 function Vinberg_Algorithm(
-        lat::HyperbolicLattice{n};
+    lat::HyperbolicLattice{n};
     rounds=nothing
-) where {n}
+)::Vector{HyperbolicLatticeElement{n}} where {n}
 
     
     G = lat.G
@@ -133,13 +133,13 @@ function Vinberg_Algorithm(
     # Get all roots defining a fundamental cone for `v₀`
     # Note that there is some degree of freedom here since `v₀` can lie in different cones.
     # But once a cone is fixed, all the other roots appearing afterwards are uniquely defined.
-    roots = roots_of_fundamental_cone(lat,roots_at_distance_zero)
+    roots::Vector{HyperbolicLatticeElement{n}} = roots_of_fundamental_cone(lat,roots_at_distance_zero)
     @info "Got the roots of a fundamental cone."
     for r in roots
         @info "                         : $r."
     end
     # Construct the corresponding `DiagramAndSubs` object containing all subdiagrams of the Coxeter diagram defined by the roots
-    Coxeter_matrix = reduce(hcat,[[Coxeter_coeff(r₁,r₂) for r₁ in roots] for r₂ in roots])
+    Coxeter_matrix = get_Coxeter_matrix(roots) 
     diagram = build_diagram_and_subs(Coxeter_matrix,n-1)
     @info "Built the corresponding Coxeter diagram."
 
@@ -188,7 +188,7 @@ function Vinberg_Algorithm(
    
     println("Decision ($(rounds)) :", is_finite_volume(diagram))
     @toggled_assert length(roots) == length(drop_redundant_halfspaces(roots))
-    return sort([vec(r) for r in roots])
+    return roots
 
 end
 

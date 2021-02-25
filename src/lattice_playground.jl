@@ -53,6 +53,15 @@ Vin07_L19 = -8*I_ ⊕ A_(3)
 # From B&P
 BP18_12 = U_ ⊕ 36*I_ ⊕ 6*I_
 
+#Bianchi, following McLeod
+Bihat(m) = begin
+    if m % 4 == 1 || m % 4 == 2
+        [0 -1 0 0; -1 0 0 0; 0 0 2 0; 0 0 0 2*m]
+    elseif m % 4 == 3
+        [0 -1 0 0; -1 0 0 0; 0 0 2 1; 0 0 1 Int((m+1)//2)]
+    end
+end
+
 # This one doesn't seem to be reflective, but it may well be
 G2 = [-7 0   0 0; 
       0 2 -1 0; 

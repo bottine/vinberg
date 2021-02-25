@@ -398,3 +398,4 @@ distance_to_hyperplane(
 ) =  asinh( sinh_distance_to_hyperplane(v,e) )
 
 
+get_Coxeter_matrix(roots) = reduce(hcat,[[Coxeter_coeff(r₁,r₂) for r₁ in roots] for r₂ in roots])

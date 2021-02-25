@@ -16,25 +16,25 @@ Rat = Rational{Int}
 
 iff(a::Bool,b::Bool) = a&&b || (!a)&&(!b)
 
-function diag_product(x::SVector{n},y::SVector{n},z::SVector{n}) where {n}
+function diag_product(x::SVector{N},y::SVector{N},z::SVector{N}) where {N}
     val = 0
-    for i in 1:n
+    @inbounds for i in 1:N
        val += x[i]*y[i]*z[i]
     end
     return val
 end
 function diag_product(n::Int,x::SVector{N},y::SVector{N},z::SVector{N}) where {N}
-    @toggled_assert 1 ≤ n && n ≤ N
+    @assert 1 ≤ n && n ≤ N
     val = 0
-    for i in n:N
+    @inbounds for i in n:N
        val += x[i]*y[i]*z[i]
     end
     return val
 end
 function dot(n::Int,x::SVector{N},y::SVector{N}) where {N}
-    @toggled_assert 1 ≤ n && n ≤ N
+    @assert 1 ≤ n && n ≤ N
     val = 0
-    for i in n:N
+    @inbounds for i in n:N
        val += x[i]*y[i]
     end
     return val

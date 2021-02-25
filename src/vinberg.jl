@@ -26,13 +26,10 @@ end
 function Vinberg_Algorithm_stats(
     folder, 
     path;
-    v₀_vec=nothing
 )
     G = txtmat_path_to_matrix(joinpath(folder, path))
-    roots, time = @timed Vinberg_Algorithm(HyperbolicLattice(G, v₀_vec=v₀_vec))
-    v₀_vec = HyperbolicLattice(G, v₀_vec=v₀_vec).v₀.vec
-    # return JSON.json(Dict("path"=>path,"matrix"=>G,"v₀"=>v₀_vec,"roots"=>roots,"time"=>time))
-    return Dict("path" => path, "matrix" => G, "v₀" => v₀_vec, "roots" => roots, "time" => time)
+    roots, time = @timed Vinberg_Algorithm(HyperbolicLattice(G))
+    return Dict("path" => path, "matrix" => G, "roots" => roots, "time" => time)
 end
 
 
@@ -68,7 +65,6 @@ function test_suite(label=nothing;cache_behaviour=:empty_batched,log_location=no
         for entry in known_values
             path = String(entry["path"])
             matrix = Array{Int,2}(hcat(entry["matrix"]...))
-            v₀_vec = Array{Int,1}(entry["v0"])
             roots = Array{Array{Int,1},1}(entry["roots"])
             time = Float64(entry["time"])
             time_history = "time_history" ∈ keys(entry) ? Dict{String,Float64}(entry["time_history"]) : Dict{String,Float64}()
@@ -89,8 +85,8 @@ function test_suite(label=nothing;cache_behaviour=:empty_batched,log_location=no
                 push!(time_history, label => my_time)
             end
 
-            myr = [(fake_dist(lat, lat(r)),r) for r in my_roots]
-            ofr = [(fake_dist(lat, lat(r)),r) for r in roots]
+            myr = [(fake_dist(lat, r),r) for r in my_roots]
+            ofr = [(fake_dist(lat, r),r) for r in lat.(roots)]
 
             sort!(myr)
             sort!(ofr)
