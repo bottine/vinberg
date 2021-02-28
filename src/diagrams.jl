@@ -626,11 +626,25 @@ function build_diagram_and_subs(M::Array{Int,2},dimension::Int)
     for i in 1:n
         #println(i)
         extend!(das,M[i,1:i-1])
+        #println("DAS")
+        #println("induced components: $(length(das.subs)) (size = $(sizeof(das.subs)))")
+        #println("affine: $(length(das.affine_subs_rank_d_minus_1))")
+        #println("sph d: $(length(das.spherical_subs_rank_d))")
+        #println("sph d-1: $(length(das.spherical_subs_rank_d_minus_1))")
+        #println("conn: $(num_connected_subs(das))")
     end
     return das
 end
 
-
+function num_connected_subs(das::DiagramAndSubs)
+    csubs = Set{SBitSet{1}}()
+    for (sup,sub) in das.subs
+        for cs in sub.connected_components
+            push!(csubs,cs.vertices)
+        end
+    end
+    return length(csubs)
+end
 
 # ##########################
 #

@@ -284,8 +284,8 @@ function is_necessary_halfspace(cone_roots::Vector{SVector{rank,Int}},root::SVec
     # it should only be strictly bigger than zero, but Convex.jl does not do "strictly", so we change it to ≥ 1 (and since we have a cone, it should be the same result)
 
     
-    #solve!(p,Cbc.Optimizer(verbose=0,loglevel=0), verbose=false, warmstart=false)
-    solve!(p,COSMO.Optimizer(verbose=false), verbose=false)
+    solve!(p,Cbc.Optimizer(verbose=0,loglevel=0), verbose=false, warmstart=false)
+    #solve!(p,COSMO.Optimizer(verbose=false), verbose=false)
    
 
     if p.status == MathOptInterface.INFEASIBLE 
@@ -377,5 +377,50 @@ function matrix_to_txtmat_path(Mat, path)
 
     s = open(path,"w") do file
         print(file, matrix_to_txtmat(Mat))
+    end
+end
+
+function matrix_to_dot(Mat)
+    
+    (m,n) = size(Mat)
+    
+    @assert m == n
+
+    dot_string = """
+strict graph {
+    layout=neato
+    node [shape=point];
+    """
+
+    function label_to_edge_type(k)
+        if k == 1
+            return "[style=dotted,label=$k,weight=0]"
+        elseif k == 0
+            return "[penwidth=3,label=$k,weight=2]"
+        elseif k == 3
+            return "[label=$k]"
+        elseif k > 3
+            return "[color = \"" * "black:invis:"^(k-3) * ":black\",label=$k]"
+        end
+    end
+
+    for i in 1:m
+        for j in i+1:n
+            if Mat[i,j] ≠ 2
+                dot_string = dot_string * "\t$i -- $j" * label_to_edge_type(Mat[i,j]) * ";\n"
+            end
+        end
+    end
+
+    dot_string = dot_string * "}"
+
+
+    return dot_string
+
+end
+
+function matrix_to_dot_file(Mat, path)
+    s = open(path,"w") do file
+        print(file, matrix_to_dot(Mat))
     end
 end

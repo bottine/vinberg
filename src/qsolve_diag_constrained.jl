@@ -50,7 +50,7 @@ end
 @inline function float_solve_quadratic_poly(a::Int,b::Int,c::Rat)
     
     Δ = b^2 - 4*a*c
-    res = []
+    res = Float64[]
     if Δ ≥ 0
         δ = sqrt(Δ)
         push!(res,(-b-δ)/(2*a))
@@ -65,7 +65,7 @@ end
 @inline function int_solve_quadratic_poly(a::Int,b::Int,c::Int)
     
     Δ = b^2 - 4*a*c
-    res = []
+    res = Int[]
     if Δ ≥ 0
         δ = Int(round(sqrt(Δ),digits=0)) # actually faster than isqrt( ) it seems
         if δ^2 == Δ

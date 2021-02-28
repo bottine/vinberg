@@ -117,6 +117,7 @@ Run the Vinberg algorithm on the lattice ``lat`` with basepoint ``lat.v₀`` unt
 """
 function Vinberg_Algorithm(
     lat::HyperbolicLattice{n};
+    given_cone_roots::Vector{HyperbolicLatticeElement{n}} = Vector{HyperbolicLatticeElement{n}}(),
     rounds=nothing
 )::Vector{HyperbolicLatticeElement{n}} where {n}
 
@@ -129,7 +130,14 @@ function Vinberg_Algorithm(
     # Sort the roots, so as to have a predictable choice of fundamental cone
     sort!(roots_at_distance_zero)
     @info "Got all roots at distance zero."
-    
+  
+    given = given_cone_roots
+    @info "Adding given cone roots to the mix:"
+    @assert all(fake_dist(lat,r) == 0 for r in given)
+    @assert all(is_root(r) for r in given)
+
+    roots_at_distance_zero = vcat(given, filter(r -> r ∉ given, roots_at_distance_zero))
+
     # Get all roots defining a fundamental cone for `v₀`
     # Note that there is some degree of freedom here since `v₀` can lie in different cones.
     # But once a cone is fixed, all the other roots appearing afterwards are uniquely defined.
@@ -193,10 +201,16 @@ function Vinberg_Algorithm(
 end
 
 function Vinberg_Algorithm(
-    G,
+    G;
+    cone_roots=[],
     rounds=nothing
-) where {n}
-    return Vinberg_Algorithm(HyperbolicLattice(G),rounds=rounds)
+)
+    lat = HyperbolicLattice(G)
+    given_cone_roots::Vector{HyperbolicLatticeElement{rk(lat)}} = [lat(v) for v in cone_roots]
+    ! all(is_root(r) for r in given_cone_roots) && @warn "Not all given cone roots are actually roots."
+    ! all( !is_root(r) || (fake_dist(lat,r) == 0) for r in given_cone_roots) && @warn "Not all given cone roots are at distance zero."
+    filter!(x->  is_root(x) && fake_dist(lat,x) == 0, given_cone_roots)
+    return Vinberg_Algorithm(HyperbolicLattice(G),rounds=rounds,given_cone_roots=given_cone_roots)
 end
 
 
