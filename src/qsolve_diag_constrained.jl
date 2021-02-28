@@ -15,10 +15,10 @@ Rat = Rational{Int}
 
 function val( # zDz + zb + γ with all of those with indices ranging from n to N
     k::Int,
-    D::SVector{N},
-    b::SVector{N},
+    D::SizedVector{N},
+    b::SizedVector{N},
     γ::Int,
-    z::SVector{N}
+    z::SizedVector{N}
    ) where {N} 
     diag_product(k,z,D,z) + dot(k,b,z) + γ
 end
@@ -36,10 +36,10 @@ end
 
 function min_quad(
     k::Int,
-    D::SVector{N,Int},
-    b::SVector{N,Int},
+    D::SizedVector{N,Int},
+    b::SizedVector{N,Int},
     γ::Int,
-)::SVector{N-k+1,Rat} where {N}
+)::SizedVector{N-k+1,Rat} where {N}
 
     @toggled_assert all(d > 0 for d in D) 
     min_point =  -(b[k:N] .// D[k:N]) //2
@@ -80,7 +80,7 @@ end
     return res
 end
 
-function updateat(v::SVector{n,T},a::T,idx::Int) where {n,T}
+function updateat(v::SizedVector{n,T},a::T,idx::Int) where {n,T}
     @toggled_assert 1 ≤ idx && idx ≤ n
     insert(deleteat(v,idx),idx,a)
 end
@@ -94,25 +94,25 @@ function last_non_zero(v)
     return -1
 end
 
-function unzip(pairs::Vector{Tuple{SVector{N,Int},Int}})::Tuple{Vector{SVector{N,Int}},Vector{Int}} where {N} 
+function unzip(pairs::Vector{Tuple{SizedVector{N,Int},Int}})::Tuple{Vector{SizedVector{N,Int}},Vector{Int}} where {N} 
     return ([p[1] for p in pairs],[p[2] for p in pairs])
 end
 
 @resumable function qsolve_diag_con(
-    D::SVector{N,Int},
-    b::SVector{N,Int},
+    D::SizedVector{N,Int},
+    b::SizedVector{N,Int},
     γ::Int,
-    constraints::Vector{Tuple{SVector{N,Int},Int}},
+    constraints::Vector{Tuple{SizedVector{N,Int},Int}},
     the_norm::Int,
-    w_diag::SVector{N,Int},
+    w_diag::SizedVector{N,Int},
     common_denom::Int,
-)::SVector{N,Int} where {N}
+)::SizedVector{N,Int} where {N}
 
     con = [filter(x -> last_non_zero(x[1]) == i, constraints) for i in 1:N]
     ccon = [unzip(level) for level in con] 
 
 
-    for s in qsolve_diag_constrained(SVector{0,Int}(),D,b,γ,min_quad(1,D,b,γ),ccon,the_norm,w_diag,common_denom)
+    for s in qsolve_diag_constrained(SizedVector{0,Int}(),D,b,γ,min_quad(1,D,b,γ),ccon,the_norm,w_diag,common_denom)
         @yield s
     end
 
@@ -123,7 +123,7 @@ end
 function sub_kth_in_constraint(
     k::Int,
     x::Int,
-    vec::SVector{N,Int},
+    vec::SizedVector{N,Int},
     val::Int
 )::Int where {N}
     return val-vec[k]*x
@@ -132,7 +132,7 @@ end
 function sub_kth_in_constraints(
     k::Int,
     x::Int,
-    vecs::Vector{SVector{N,Int}},
+    vecs::Vector{SizedVector{N,Int}},
     vals::Vector{Int}
 )::Vector{Int} where {N}
     return [sub_kth_in_constraint(k,x,vec,val) for (vec,val) in zip(vecs,vals)]
@@ -141,8 +141,8 @@ end
 function sub_kth_in_constraints(
     k::Int,
     x::Int,
-    constraints::Vector{Tuple{Vector{SVector{N,Int}},Vector{Int}}},
-)::Tuple{Bool,Vector{Tuple{Vector{SVector{N,Int}},Vector{Int}}}} where {N}
+    constraints::Vector{Tuple{Vector{SizedVector{N,Int}},Vector{Int}}},
+)::Tuple{Bool,Vector{Tuple{Vector{SizedVector{N,Int}},Vector{Int}}}} where {N}
 
     level0 = constraints[1]
     feasible = all([v ≥ 0 for v in sub_kth_in_constraints(k,x,level0[1],level0[2])])
@@ -156,17 +156,17 @@ update_γ(k,D,b,γ,last_x) = γ+D[k]*last_x^2 + last_x*b[k]
 matching_D_b_γ(k,D,b,γ,min) = (D[k],b[k],γ+diag_product(k,min,D,min) + dot(k,min,b))
 
 @resumable function qsolve_diag_constrained(
-    prefix::SVector{k_minus_one,Int},
-    D::SVector{N,Int},
-    b::SVector{N,Int},
+    prefix::SizedVector{k_minus_one,Int},
+    D::SizedVector{N,Int},
+    b::SizedVector{N,Int},
     γ::Int,
-    min_point::SVector{N,Rat},
-    constraints::Vector{Tuple{Vector{SVector{N,Int}},Vector{Int}}},
+    min_point::SizedVector{N,Rat},
+    constraints::Vector{Tuple{Vector{SizedVector{N,Int}},Vector{Int}}},
     the_norm::Int,
-    w_diag::SVector{N,Int},
+    w_diag::SizedVector{N,Int},
     common_denom::Int,
     depth=0,
-)::SVector{N,Int} where {k_minus_one,N}
+)::SizedVector{N,Int} where {k_minus_one,N}
     
     k = k_minus_one + 1
     @toggled_assert all(d > 0 for d in D) 
@@ -174,7 +174,7 @@ matching_D_b_γ(k,D,b,γ,min) = (D[k],b[k],γ+diag_product(k,min,D,min) + dot(k,
 
     if k == N
     
-        candidate_sols = SVector{1,Int}.(int_solve_quadratic_poly(D[k],b[k],γ))
+        candidate_sols = SizedVector{1,Int}.(int_solve_quadratic_poly(D[k],b[k],γ))
         for s in candidate_sols
             feasible, remaining = sub_kth_in_constraints(k,s[1],constraints)
             feasible && @yield vcat(prefix,s)

@@ -26,7 +26,7 @@ function is_necessary_halfspace(
     @toggled_assert is_root(r)
     @toggled_assert all(is_root(ro) for ro in rr)
     
-    return is_necessary_halfspace(lat.D,[ro.diag_coordinates for ro in rr],r.diag_coordinates)
+    return is_necessary_halfspace(lat.D,Vector{SizedVector{n,Int}}([ro.diag_coordinates for ro in rr]),r.diag_coordinates)
 
 end
 
@@ -37,8 +37,8 @@ end
 Given the collection of roots `roots` defining a cone and the corresponding partial products `roots_pp`, drop all which are redundant in the halfspace decomposition of the cone. 
 """
 function drop_redundant_halfspaces(
-    roots#=::Vector{HyperbolicLatticeElement{n}}=#,
-)# where {n}
+    roots::Vector{HyperbolicLatticeElement{n}},
+) where {n}
     
     #TODO: put signature back in a way that the compiler likes
     
@@ -93,7 +93,7 @@ function roots_of_fundamental_cone(
            
             # Test that adding the halfspace ``ℋ_r⁻`` defined by `r` doesn't make the resulting cone degenerate (checked by `is_necessary_halfspace(cone_roots, -r`).
             # Indeed, the intersection becomes degenerate iff the intersection with ``ℋ_{-r}⁻ = ℋ_r⁺`` is /not/ strictly smaller than the original cone, which is iff ``-r`` defines a necessary halfspace.
-            #if is_necessary_halfspace(cone_roots::Vector{HyperbolicLatticeElement{rk(lat)}},cone_roots_pp::Vector{SVector{rk(lat),Int}},-r::HyperbolicLatticeElement{rk(lat)},-r_pp::SVector{rk(lat),Int})
+            #if is_necessary_halfspace(cone_roots::Vector{HyperbolicLatticeElement{rk(lat)}},cone_roots_pp::Vector{SizedVector{rk(lat),Int}},-r::HyperbolicLatticeElement{rk(lat)},-r_pp::SizedVector{rk(lat),Int})
             if is_necessary_halfspace(cone_roots,-r)
                 @debug "And it does not make the cone degenerate."
                 

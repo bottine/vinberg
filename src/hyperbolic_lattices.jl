@@ -32,16 +32,16 @@ struct HyperbolicLattice{rank}
     # Rank
     r::Int
     
-    # Matrix defining the bilinear form: We store it as a `SMatrix` for performance reasons
-    G::SMatrix{rank,rank,Int}
+    # Matrix defining the bilinear form: We store it as a `SizedMatrix` for performance reasons
+    G::SizedMatrix{rank,rank,Int}
     
     # Diagonalisation pair.
-    P::SMatrix{rank,rank,Int}
-    Pinv::SMatrix{rank,rank,Rat}
-    D::SVector{rank,Int}
-    W::Vector{SVector{rank,Int}}
+    P::SizedMatrix{rank,rank,Int}
+    Pinv::SizedMatrix{rank,rank,Rat}
+    D::SizedVector{rank,Int}
+    W::Vector{SizedVector{rank,Int}}
     common_denominator::Int
-    W_coordinates::Vector{SVector{rank,ScaledInt}}
+    W_coordinates::Vector{SizedVector{rank,ScaledInt}}
 
     # latast invariant factor and possible root lengths.
     last_invariant_factor::Int
@@ -70,8 +70,8 @@ function HyperbolicLattice(G)
     
     rank = size(G)[1]
 
-    # G can be essentially in any "matrix-like" form, so we convert it to a SMatrix (the small 's' stands for "static"
-    sG = SMatrix{rank,rank,Int}(G)
+    # G can be essentially in any "matrix-like" form, so we convert it to a SizedMatrix (the small 's' stands for "static"
+    sG = SizedMatrix{rank,rank,Int}(G)
 
     # Diagonalize G
     D,P = diagonalize(sG)
@@ -85,10 +85,10 @@ function HyperbolicLattice(G)
     absdetP = Int(abs(det(Rational{Int}.(P))))
 
     W_,W_coordinates_ = get_integer_points_with_coordinates(P,absdetP)
-    W = Vector{SVector{rank,Int}}(W_) # coset representatives under "natural" coordinates
+    W = Vector{SizedVector{rank,Int}}(W_) # coset representatives under "natural" coordinates
 
     common_denominator = lcm([lcm(denominator.(w)) for w in W_coordinates_])
-    W_coordinates = Vector{SVector{rank,Int}}([Int.(common_denominator*w) for w in W_coordinates_]) # coset represnetative under "diagonal" coordinates
+    W_coordinates = Vector{SizedVector{rank,Int}}([Int.(common_denominator*w) for w in W_coordinates_]) # coset represnetative under "diagonal" coordinates
 
     rG = Rational{Int}.(sG)
     cofactorsG = det(rG) * inv(rG) # 
@@ -123,7 +123,7 @@ end
 
 struct HyperbolicLatticeElement{rk}
     lat::HyperbolicLattice{rk}
-    diag_coordinates::SVector{rk,ScaledInt} 
+    diag_coordinates::SizedVector{rk,ScaledInt} 
 end
 
 function Base.:(==)(lat1::HyperbolicLattice,lat2::HyperbolicLattice)
@@ -143,7 +143,7 @@ end
 
 
 function v₀(lat::HyperbolicLattice{rk}) where {rk}
-    return HyperbolicLatticeElement(lat,SVector{rk,ScaledInt}(vcat([lat.common_denominator],[0 for i in 1:rk-1])))
+    return HyperbolicLatticeElement(lat,SizedVector{rk,ScaledInt}(vcat([lat.common_denominator],[0 for i in 1:rk-1])))
 end
 
 function times_v₀(lat::HyperbolicLattice,v::HyperbolicLatticeElement)::Int
@@ -151,11 +151,11 @@ function times_v₀(lat::HyperbolicLattice,v::HyperbolicLatticeElement)::Int
 end
 
 """
-    Create a hyperbolic lattice element out of a lattice `L` and a vector `vec` by first converting `vec` to a `SVector`.
+    Create a hyperbolic lattice element out of a lattice `L` and a vector `vec` by first converting `vec` to a `SizedVector`.
     Allows using the syntax `L(vec)`.
 """
 function (lat::HyperbolicLattice)(vec)
-    svec = SVector{rk(lat),Int}(vec)
+    svec = SizedVector{rk(lat),Int}(vec)
     HyperbolicLatticeElement(lat,Int.(lat.common_denominator*(lat.Pinv*svec)))
 end
 
@@ -179,7 +179,7 @@ function diag_rep_rational(v::HyperbolicLatticeElement)
     return (1//lat.common_denominator) * diag_coordinates
 end
 
-function std_rep(v::HyperbolicLatticeElement{r})::SVector{r,Int} where {r}
+function std_rep(v::HyperbolicLatticeElement{r})::SizedVector{r,Int} where {r}
     return (v.lat.Pinv * v.diag_coordinates)//v.lat.common_denominator
 end
 
@@ -207,7 +207,7 @@ end
     The standard basis of the lattice, that is, given by the vectors (1,0,…,0),…,(0,…,0,1,0…,0),…,(0,…,0,1).
 """
 function standard_basis(lat::HyperbolicLattice)
-    return lat.(SVector{rk(lat),Int}.(collect(eachcol(I(rk(lat))))))
+    return lat.(SizedVector{rk(lat),Int}.(collect(eachcol(I(rk(lat))))))
 end
 
 function Base.:-(v::HyperbolicLatticeElement) 
@@ -365,7 +365,7 @@ function fake_dist(lat::HyperbolicLattice,e::HyperbolicLatticeElement)
 end
 
 function zero_elem(lat::HyperbolicLattice)
-    HyperbolicLatticeElement(lat,SVector{rk(lat),Int}(zeros(rk(lat))))
+    HyperbolicLatticeElement(lat,SizedVector{rk(lat),Int}(zeros(rk(lat))))
 end
 
 """

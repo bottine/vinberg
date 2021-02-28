@@ -16,14 +16,14 @@ Rat = Rational{Int}
 
 iff(a::Bool,b::Bool) = a&&b || (!a)&&(!b)
 
-function diag_product(x::SVector{N},y::SVector{N},z::SVector{N}) where {N}
+function diag_product(x::SizedVector{N},y::SizedVector{N},z::SizedVector{N}) where {N}
     val = 0
     @inbounds for i in 1:N
        val += x[i]*y[i]*z[i]
     end
     return val
 end
-function diag_product(n::Int,x::SVector{N},y::SVector{N},z::SVector{N}) where {N}
+function diag_product(n::Int,x::SizedVector{N},y::SizedVector{N},z::SizedVector{N}) where {N}
     @assert 1 ≤ n && n ≤ N
     val = 0
     @inbounds for i in n:N
@@ -31,7 +31,7 @@ function diag_product(n::Int,x::SVector{N},y::SVector{N},z::SVector{N}) where {N
     end
     return val
 end
-function dot(n::Int,x::SVector{N},y::SVector{N}) where {N}
+function dot(n::Int,x::SizedVector{N},y::SizedVector{N}) where {N}
     @assert 1 ≤ n && n ≤ N
     val = 0
     @inbounds for i in n:N
@@ -50,10 +50,10 @@ function signature(G)
 end
 
 function diagonalize(A::Array{Int,2}) 
-    return diagonalize(SMatrix{size(A)[1],size(A)[2],Int}(A))
+    return diagonalize(SizedMatrix{size(A)[1],size(A)[2],Int}(A))
 end
 
-function diagonalize(A::SMatrix{dim,dim,Int}) where {dim}
+function diagonalize(A::SizedMatrix{dim,dim,Int}) where {dim}
     # returns T and D with D = T'GT
     # algorithm copied from there https://math.stackexchange.com/questions/1388421/reference-for-linear-algebra-books-that-teach-reverse-hermite-method-for-symmetr
     # plus a gcd step to reduce the growth of values
@@ -68,7 +68,7 @@ function diagonalize(A::SMatrix{dim,dim,Int}) where {dim}
 
     n = size(A)[1]
     i0 = 1
-    I_ = SMatrix{dim,dim,Int128}(I)
+    I_ = SizedMatrix{dim,dim,Int128}(I)
     M::MMatrix{dim,2*dim} = [A I_]
     while i0 ≤ n
        
@@ -145,7 +145,7 @@ function diagonalize(A::SMatrix{dim,dim,Int}) where {dim}
     @assert P'*A*P == D "We have a diagonalization"
     @assert A == inv(P')*D*inv(P) "We have a diagonalization"
 
-    return (SMatrix{dim,dim,Int}(D),SMatrix{dim,dim,Int}(P))
+    return (SizedMatrix{dim,dim,Int}(D),SizedMatrix{dim,dim,Int}(P))
 
 end
 
@@ -170,8 +170,8 @@ function test_diagonalize()
 end 
 
 function get_integer_points(
-    M::SMatrix{rank,rank,Int}
-)::Vector{SVector{rank,Int}} where {rank}
+    M::SizedMatrix{rank,rank,Int}
+)::Vector{SizedVector{rank,Int}} where {rank}
   
     invM = inv(M) 
     # TODO: Maybe we want an exact inverse: invM = inv(Rational{Int}.(M)) 
@@ -186,12 +186,12 @@ function get_integer_points(
     maximum = [sum([max(v,0) for v in M[i,:]]) for i in 1:n]
     interval = [collect(min:max) for (min,max) in zip(minimum,maximum)]
 
-    function parallelipiped_contains(v::SVector{rank,Int})
+    function parallelipiped_contains(v::SizedVector{rank,Int})
         Q = invM*v
         return all(c < 1 && c >= 0 for c in Q)
     end
     
-    bb = SVector{rank,Int}.(Base.product(interval...))
+    bb = SizedVector{rank,Int}.(Base.product(interval...))
     integer_points = [b for b in bb if parallelipiped_contains(b)] 
     
     dtr = Int(abs(det(Rational{Int}.((M)))))
@@ -203,12 +203,12 @@ function get_integer_points(
 end
 
 function get_integer_points_with_coordinates(
-    M::SMatrix{rank,rank,Int},
+    M::SizedMatrix{rank,rank,Int},
     absdet::Int
 )::Tuple{
-        SVector{absdet,SVector{rank,Int}},
-        SVector{absdet,SVector{rank,Rational{Int}}},
-    } where {rank}
+    Vector{SizedVector{rank,Int}},
+    Vector{SizedVector{rank,Rational{Int}}},
+} where {rank}
   
 
 
@@ -224,7 +224,7 @@ function get_integer_points_with_coordinates(
     maximum = [sum([max(v,0) for v in M[i,:]]) for i in 1:n]
     interval = [collect(min:max) for (min,max) in zip(minimum,maximum)]
 
-    function parallelipiped_contains(v::SVector{rank,Int})
+    function parallelipiped_contains(v::SizedVector{rank,Int})
         coordinates = invM*v
         if all(c < 1 && c >= 0 for c in coordinates) 
             return coordinates
@@ -233,9 +233,9 @@ function get_integer_points_with_coordinates(
         end
     end
     
-    bb = SVector{rank,Int}.(Base.product(interval...))
-    integer_points = MVector{absdet,SVector{rank,Int}}(undef);
-    integer_points_coordinates = MVector{absdet,SVector{rank,Rational{Int}}}(undef);
+    bb = SizedVector{rank,Int}.(Base.product(interval...))
+    integer_points = SizedVector{absdet,SizedVector{rank,Int}}(undef);
+    integer_points_coordinates = SizedVector{absdet,SizedVector{rank,Rational{Int}}}(undef);
     idx = 1
     for b in bb
         c = parallelipiped_contains(b)
@@ -252,21 +252,21 @@ function get_integer_points_with_coordinates(
     #integer_points = [v for v in bb if parallelipiped_contains(v)]
     #@toggled_assert idx == absdet+1 "index = |determinant| = volume (I think)"
 
-    return SVector(integer_points),SVector(integer_points_coordinates)
+    return integer_points,integer_points_coordinates
 end
 
 
 function is_necessary_halfspace(
-    D::SVector{rank,Int},
-    cone_roots::Vector{SVector{rank,Int}},
-    root::SVector{rank,Int},
+    D::SizedVector{rank,Int},
+    cone_roots::Vector{SizedVector{rank,Int}},
+    root::SizedVector{rank,Int},
    ) where {rank}
 
-    return is_necessary_halfspace([D .* cr for cr in cone_roots],D .* root)
+    return is_necessary_halfspace(Vector{SizedVector{rank,Int}}([D .* cr for cr in cone_roots]),D .* root)
 
 end
 
-function is_necessary_halfspace(cone_roots::Vector{SVector{rank,Int}},root::SVector{rank,Int}) where {rank}
+function is_necessary_halfspace(cone_roots::Vector{SizedVector{rank,Int}},root::SizedVector{rank,Int}) where {rank}
 
 
     n = rank
@@ -301,7 +301,7 @@ function is_necessary_halfspace(cone_roots::Vector{SVector{rank,Int}},root::SVec
 end
 
 #=
-function is_necessary_halfspace(cone_roots::Vector{SVector{rank,Int}},A::SMatrix{rank,rank,Int},root::SVector{rank,Int}) where {rank}
+function is_necessary_halfspace(cone_roots::Vector{SizedVector{rank,Int}},A::SizedMatrix{rank,rank,Int},root::SizedVector{rank,Int}) where {rank}
     
     return is_necessary_halfspace((r -> A*r).(cone_roots),A*root)
 

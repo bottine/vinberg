@@ -29,7 +29,7 @@ GenDeg = Int
 
 By convention, to `0` corresponds an isolated vertex.
 """
-empty_deg = 0
+const empty_deg = 0
 
 
 
