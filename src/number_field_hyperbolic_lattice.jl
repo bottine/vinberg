@@ -6,7 +6,6 @@ using Hecke
 
 
 
-
 function ideal_gcd(ring,elems)
     idls = [ideal(ring,ring(e)) for e in elems]
     gcd_idls = reduce(gcd,idls)
@@ -38,13 +37,12 @@ function get_possible_root_norms(
 end
 
 function get_possible_root_norms(
-	number_field,# The number field in which we play
-	algebraic_integers, # Its ring of algebraic integers
 	quad_space, # A quadratic space 
+	algebraic_integers, # Its ring of algebraic integers
 )
-    field = number_field
     ring = algebraic_integers
     space = quad_space
+    field = space.K
 
     units, morphism_units = unit_group(ring)
     twice_units, morphism_twice_units = quo(units, 2) # quo(U,2) yields Q = U/U² and the quotient morphism mQ: U -> Q
@@ -125,6 +123,8 @@ function is_root(space,ring,vector)
     !is_primitive(space,ring,vector) && return false
 
     !crystallographic_condition(space,ring,vector) && return false 
+
+    @assert inner_product(space,vector,vector) ∈ get_possible_root_norms(space,ring)
 
     return true
 
