@@ -26,17 +26,17 @@ function products(d)
     return [prod([k^p for (k,p) in zip(ks,pp)]) for pp in partial_products]
 end
 
-function get_possible_root_norms(
+function possible_root_norms_up_to_squared_units(
     quad_space::Hecke.QuadSpace
 )
 
     number_field = quad_space.K
     algebraic_integers = ring_of_integers(number_field)
     
-    return get_possible_root_norms(number_field,algebraic_integers,quad_space)
+    return possible_root_norms_up_to_squared_units(number_field,algebraic_integers,quad_space)
 end
 
-function get_possible_root_norms(
+function possible_root_norms_up_to_squared_units(
 	quad_space, # A quadratic space 
 	algebraic_integers, # Its ring of algebraic integers
 )
@@ -57,7 +57,12 @@ function get_possible_root_norms(
     cofactors = det(gram) * inv(gram)
     gcd_cofactors = ideal_gcd(ring,collect(cofactors))
 
-
+    # this is the ideal ⟨2*last_invariant_factor⟩ = ⟨2*det(gram)/gcd(cofactors(gram))⟩
+    # constructed by taking the ideal I :=⟨gcd(cofactors(gram))⟩
+    # and the ideal                   J := ⟨det(gram)⟩
+    # then taking the ideal (I:J) = \{x: xI ⊆ J\}
+    # then multiplying by the ideal ⟨2⟩
+    # Probably one can do something cleaner
     twice_last_invariant_factor = ideal(ring,2)*colon(ideal(ring,ring(det(gram))),gcd_cofactors)
     twice_last_invariant_factor_factors = Hecke.factor(twice_last_invariant_factor)
     @assert all(Hecke.isprincipal(idl)[1] for idl in keys(twice_last_invariant_factor_factors))
@@ -114,6 +119,7 @@ function crystallographic_condition(space,ring,vector)
     return true
 end
 
+
 function is_root(space,ring,vector)
 
     !has_positive_norm(space,ring,vector) && return false
@@ -124,7 +130,8 @@ function is_root(space,ring,vector)
 
     !crystallographic_condition(space,ring,vector) && return false 
 
-    @assert inner_product(space,vector,vector) ∈ get_possible_root_norms(space,ring)
+    #Not gonna work since it is only up to squared units: neeed to use the morphisms constructed in possible_root_norms_up_to_squared_units
+    #@assert inner_product(space,vector,vector) ∈ possible_root_norms_up_to_squared_units(space,ring)
 
     return true
 
