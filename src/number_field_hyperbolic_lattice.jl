@@ -3,8 +3,184 @@ using JSON
 using StaticArrays
 using ToggleableAsserts
 using Hecke
+using AbstractAlgebra
 
 
+
+function Base.isless(x::nf_elem,y::nf_elem)
+    @assert parent(x) == parent(y)
+    field = parent(x)
+    @assert istotally_real(field)
+    places = infinite_places(field)
+    
+    if x-y == 0
+       return false
+    end
+    return isnegative(x-y,places[1])
+end
+
+Base.isless(x::nf_elem,y) =  Base.isless(x,parent(x)(y))
+Base.isless(x,y::nf_elem) = Base.isless(parent(y)(x),y)
+
+Base.isless(x::NfAbsOrdElem{AnticNumberField,nf_elem},y) =  Base.isless(x,parent(x).nf(y))
+Base.isless(x,y::NfAbsOrdElem{AnticNumberField,nf_elem}) = Base.isless(parent(y).nf(x),y)
+
+Base.isless(x::NfAbsOrdElem{AnticNumberField,nf_elem}, y::nf_elem) = Base.isless(parent(x).nf(x),y) 
+Base.isless(x::nf_elem, y::NfAbsOrdElem{AnticNumberField,nf_elem}) = Base.isless(x,parent(y).nf(y))
+
+Base.isless(x::NfAbsOrdElem{AnticNumberField,nf_elem}, y::NfAbsOrdElem{AnticNumberField,nf_elem}) = Base.isless(parent(x).nf(x),parent(y).nf(y)) 
+
+Maybe{T} = Union{T,Nothing}
+
+# Everything goes there, eventually
+mutable struct VinbergData
+    field#::AnticNumberField
+    ring#::Maybe{NfAbsOrd{AnticNumberField,nf_elem}}
+    gram_matrix#::AbstractAlgebra.Generic.MatSpaceElem{NfAbsOrdElem{AnticNumberField,nf_elem}}
+    quad_space#::Maybe{Hecke.QuadSpace{AnticNumberField,AbstractAlgebra.Generic.MatSpaceElem{nf_elem}}}
+    lattice#::Maybe{QuadLat{AnticNumberField,AbstractAlgebra.Generic.MatSpaceElem{nf_elem},Hecke.PMat{nf_elem,Hecke.NfAbsOrdFracIdl{AnticNumberField,nf_elem}}}}
+
+    least_k_by_root_length::Maybe{Dict}
+    
+end
+
+"""
+    is_feasible(field,matrix)
+
+    Check that the quadratic form defined by the matrix `matrix` has signature ``(n,1)`` and that all its (non-trivial) Galois conjugates have signature ``(n+1,0)`` (Equivalently, all are definite, the original is hyperbolic and the (non-trivial) conjugates are positive definite).
+"""
+function is_feasible(V::Hecke.QuadSpace)
+    
+    P = infinite_places(V.K)
+    n = dim(V)
+
+    return signature(V,P[1]) == (dim(V)-1,1,0) && all(signature(V,p) == (dim(V),0,0) for p in P[2:end])
+end
+
+
+function signature(V::Hecke.QuadSpace,P::InfPlc)
+       diag = [inner_product(V,v,v) for v in collect(Vector{nf_elem},eachrow(Matrix(orthogonal_basis(V))))]
+       filter!(≠(0),diag)
+       sig =  (count([ispositive(d,P) for d in diag]),count([isnegative(d,P) for d in diag]),dim(V)-length(diag))
+
+       @assert sum(sig) == dim(V)
+       return sig
+end
+
+function diag_signature(field,diagonal,place)
+    non_zeros = filter(≠(0),diagonal)
+    (count([ispositive(field(d),place) for d in non_zeros]),count([isnegative(field(d),place) for d in non_zeros]),length(diagonal)-length(non_zeros))
+end
+
+function is_diago_and_feasible(field,matrix)
+    
+    (m,n) = size(matrix)
+    
+    m ≠ n && return false
+    !isdiagonal(matrix) && return false
+
+    diagonal = [matrix[i,i] for i in 1:n]
+   
+    P = infinite_places(field)
+
+    diag_signature(field,diagonal,P[1]) ≠ (n-1,1,0) && return false
+    any(diag_signature(field,diagonal,p) ≠ (n,0,0) for p in P[2:end]) && return false
+
+    # the diagonal is ordered increasingly (this is not really necessary)
+    for i in 1:n-1
+        diagonal[i] > diagonal[i+1] && return false 
+    end
+
+    return true
+
+end
+
+function VinbergData(field,matrix)
+
+    println("hello")
+    ring = maximal_order(field)
+    quad_space = quadratic_space(field, matrix)
+    quad_lattice = Hecke.lattice(quad_space)
+    println("hello")
+
+    @assert all(field(c) ∈ ring for c in matrix) "The Gram matrix must have coefficients in the ring of integers."
+
+    println("OK")
+    @assert is_diago_and_feasible(field,matrix)
+
+    println("world")
+
+    least_k_by_root_length = Dict([ring(l) => (ring(0),NfAbsOrdElem{AnticNumberField,nf_elem}[]) for l in possible_root_norms_up_to_squared_units(ring,field,quad_space)])
+    
+    vd = VinbergData(field,ring,matrix,quad_space,quad_lattice,least_k_by_root_length)
+
+    return vd
+
+end
+
+# useless but kept for reference
+function Base.getproperty(vd::VinbergData,::Val{:ring})
+    if isnothing(vd.ring)
+        vd.ring = maximal_order(vd.field)
+    end
+    return vd.ring
+end
+
+"""
+
+Goal: enumerate all ``k=k₀`` such that ``r = (k₀,…)`` can form a root of length ``l`` (i.e. such that there exist coeffs ``k₁,…,k_n`` forming a root).
+`α` is the negative eigenvalue of the diag form, with corresponding vector `v₀`.
+`ls` contain the  inner products ``r⊙r`` that we need to consider. 
+We need to have, for all non identity Galois automorphism ``σ`` that ``|σ(k²/lα)|  ≤ 1``, which means
+`` σ(k)² ≤ |σ(lα)|.
+
+We can therefore take the max ``M = \\max_{σ≠id}|σ(lα)|``
+and we will know that if ``0≤k≤n``, then ``t₂(k) ≤ k² + GM``, where ``G`` is one minus the number of conjugates.
+
+"""
+function enumerate_k(vd::VinbergData,l,k_min,k_max)
+    
+    println("hello enumerate k for $l")
+
+    ring = vd.ring
+    field = vd.field
+
+    α = vd.gram_matrix[1,1]
+    @assert α < 0 
+
+    M = maximum(abs.(convert.(Float64,conjugates_real(field(l*α),32)[2:end])))
+    P = infinite_places(field)
+    num_non_trivial_conjugates = length(P)-1
+    k_min_squared_approx = Float64(conjugates_real(field(k_min^2),32)[1])
+    k_max_squared_approx = Float64(conjugates_real(field(k_max^2),32)[1])
+
+
+    trace_mat = trace_matrix(ring)
+    ring_basis = basis(ring)
+    candidates = [ring(dot(ring_basis,v)) for (v,magnitude) in Hecke.short_vectors(Zlattice(gram = trace_mat), k_min_squared_approx , k_max_squared_approx  + num_non_trivial_conjugates*M + 1)]
+    # the -1 and +1 are just here to have a security margin
+    println("Got ", length(candidates), " candidates.")
+    println([conjugates_real(field(c),8)[1] for c in candidates])
+    println([c for c in candidates])
+    # Only k≥0
+    filter!(
+        k-> field(k) ≥ 0,
+        candidates,    
+    )
+    
+    println("Got ", length(candidates), " candidates.")
+
+    #  |σ(k²/lα)| ≤ 1 ⇔ σ(k²) ≤ |σ(lα)| ⇔ σ(k⁴) ≤ σ(l²α²) ⇔ σ(l²α² - k⁴) ≥ 0  
+    filter!(
+        k -> all(
+            field((l*α)^2 - k^4) ≥ 0 
+            for p in P[2:end]
+        ),
+        candidates,
+    )
+    println("Got ", length(candidates), " candidates.")
+    return candidates
+end
 
 function ideal_gcd(ring,elems)
     idls = [ideal(ring,ring(e)) for e in elems]
@@ -26,23 +202,12 @@ function products(d)
     return [prod([k^p for (k,p) in zip(ks,pp)]) for pp in partial_products]
 end
 
-function possible_root_norms_up_to_squared_units(
-    quad_space::Hecke.QuadSpace
-)
-
-    number_field = quad_space.K
-    algebraic_integers = ring_of_integers(number_field)
-    
-    return possible_root_norms_up_to_squared_units(number_field,algebraic_integers,quad_space)
-end
 
 function possible_root_norms_up_to_squared_units(
-	quad_space, # A quadratic space 
-	algebraic_integers, # Its ring of algebraic integers
+    ring,
+    field,
+    space,
 )
-    ring = algebraic_integers
-    space = quad_space
-    field = space.K
 
     units, morphism_units = unit_group(ring)
     twice_units, morphism_twice_units = quo(units, 2) # quo(U,2) yields Q = U/U² and the quotient morphism mQ: U -> Q
@@ -76,7 +241,7 @@ function possible_root_norms_up_to_squared_units(
         l -> istotally_positive(field(l)),
         products(all_factors_of_root_lengths)
     )
-    return unique(all_root_norms)
+    return [ring(l) for l in unique(all_root_norms)]
 
 end
 
@@ -137,61 +302,59 @@ function is_root(space,ring,vector)
 
 end
 
-#=
-function alg_integers_with_bounded_T2_norm(OK,max_norm)
-    G = trace_matrix(OK)
-    candidates = Hecke.__enumerate_gram(G, max_norm)
-    res = [dot(g[1],basis(OK)) for g in candidates]
-    @assert all(t2(r) ≤ max_norm for r in res)
-    return res
+function is_root(vd::VinbergData,vector)
+    return is_root(vd.quad_space,vd.ring,vector)
 end
 
-function next_k₀(OK,V,l,remaining,max)
-    
-    m = 
+function next_min_k_for_l!(vd,l)
+
+    (current_k,remaining) = vd.least_k_by_root_length[l] 
+
+    k_min,k_max = current_k,current_k+1
 
     while isempty(remaining)
-        max = max+1
-       
-        # max is the max value of k that we look for
-        # Then |σ(k²/l*⟨v₀,v₀⟩)| ≤ 0 means |σ(k)|² ≤ |σ(l*⟨v₀,v₀⟩)|² ≤ ⟨v₀,v₀⟩*t₂(l)
-
-        max_T2_norm = max^2 + ?? 
-
-        candidates = alg_integers_with_bounded_T2_norm(OK)
-
+        println("remaining is empty!")
+        remaining = enumerate_k(vd,l,k_min,k_max)
+        filter!(>(current_k),remaining)
+        sort!(remaining)
+        k_min,k_max = k_max,k_max+1
     end
-
-    k = pop!(remaining)
-    return k
+    new_k = popfirst!(remaining)
+    vd.least_k_by_root_length[l] = (new_k,remaining)
 end
 
-function enumerate_ratios(G)
+function next_min_ratio!(vd::VinbergData)
+    field = vd.field
+    min_pair = nothing
+    for (l,(k,remaining)) in vd.least_k_by_root_length
+        if isnothing(min_pair) || field(k)//field(l) < field(min_pair[1])//field(min_pair[2])
+            min_pair = (k,l)
+        end
+    end
+    next_min_k_for_l!(vd,min_pair[2])
+    return min_pair
+end
+
+function extend_root_stem(vd::VinbergData,stem)
     
-    #Need to enumerate k₀>0 increasingly
-
-    # Let l denote the possible norm²: need to have σ(k₀²/l⟨v₀,v₀⟩) ≤ 1 for all non-identity Galois conjugates σ (see talk by Mark, timestamp 15:21)
-    # This means we can bound the T₂ norm of k₀
-
+    
+    
 end
-=#
 
 
-##########################
-
-Qx, x = QQ["x"]
+Qx, x = Hecke.QQ["x"]
 f = x^2 - 5
-K, a = NumberField(f, "a"); @assert istotally_real(K)
-OK = ring_of_integers(K)
-M = matrix(K, 2, 2, [-a, 0, 0 , 1]) # The bilinear form
-V = quadratic_space(K,M)
-L = lattice(V)
+K, a = Hecke.NumberField(f, "a"); @assert istotally_real(K)
+M = matrix(K, 2, 2, [a, 0, 0 , 1]) # The bilinear form
 
 
-########################
+
 #
-QK,Qa = Hecke.rationals_as_number_field()
-OQK = ring_of_integers(QK)
-QM = matrix(QK, 4, 4, [-1,0,0,0,  0,2,0,0,  0,0,6,0,  0,0,0,6])
-QV = quadratic_space(QK,QM)
-
+#
+#########################
+##
+#QK,Qa = Hecke.rationals_as_number_field()
+#OQK = ring_of_integers(QK)
+#QM = matrix(QK, 4, 4, [-1,0,0,0,  0,2,0,0,  0,0,6,0,  0,0,0,6])
+#QV = quadratic_space(QK,QM)
+#
