@@ -4,8 +4,8 @@ using StaticArrays
 using ToggleableAsserts
 using Hecke
 using AbstractAlgebra
-
-
+using Convex, Cbc, COSMO
+import MathOptInterface
 
 
 
@@ -41,6 +41,62 @@ end
 
 
 
+# make exact
+function is_necessary_halfspace(cone_roots,root) 
+    
+    float_cone_roots = Vector{Vector{Float64}}([approx.(cone_root) for cone_root in cone_roots])    
+    float_root = Vector{Float64}(approx.(root))
+    
+    n = length(root) 
+
+    # x' * (A * r) ≤ 0 ∀ r
+    # (A * r)' * x ≤ 0 ∀ r
+
+    #x = Variable(n, IntVar)
+    x = Variable(n)
+    p = satisfy()       # satisfiability question 
+    for cone_root in float_cone_roots
+        p.constraints += x' * cone_root ≤ 0 # hyperplanes defining the cone
+    end
+    p.constraints += x' * float_root ≥ 1 # other side of the half space defined by root
+    # it should only be strictly bigger than zero, but Convex.jl does not do "strictly", so we change it to ≥ 1 (and since we have a cone, it should be the same result)
+
+    
+    Convex.solve!(p,Cbc.Optimizer(verbose=0,loglevel=0), verbose=false, warmstart=false)
+    #solve!(p,COSMO.Optimizer(verbose=false), verbose=false)
+   
+
+    if p.status == MathOptInterface.INFEASIBLE 
+        return false
+    elseif p.status == MathOptInterface.OPTIMAL
+        #println(p.optval)
+        return true
+    else
+        println("can't tell! ($(p.status))")
+        println("             $(p))")
+    end
+
+end
+
+
+function drop_redundant_halfspaces(
+    roots
+) 
+    
+    
+    for i in length(roots):-1:1
+       
+        rr = copy(roots)
+        r = popat!(rr,i)
+
+        if ! is_necessary_halfspace(rr,r)
+            return drop_redundant_halfspaces(rr) 
+        end
+    end
+    
+    return roots
+    
+end
 
 
 
@@ -152,6 +208,9 @@ function non_neg_short_t2_elems(O::NfAbsOrd, lb, ub)
     return candidates
 end
 
+approx(x) = Float64(conjugates_real(x)[1])
+approx(x::NfAbsOrdElem{AnticNumberField,nf_elem}) = conjugates_real(x.elem_in_nf)[1]
+
 ###############################################################################
 ###############################################################################
 ###############################################################################
@@ -254,7 +313,7 @@ end
 function has_positive_norm(space,ring,vector)
     field = space.K
     
-    l = inner_product(space,vector,vector)
+    l = Hecke.inner_product(space,vector,vector)
 
     if l ≤ 0 
         return false
@@ -267,10 +326,10 @@ function is_primitive(space,ring,vector)
 end
 
 function crystallographic_condition(space,ring,vector)
-    l = inner_product(space,vector,vector)
+    l = Hecke.inner_product(space,vector,vector)
 
     for b in eachcol(I(length(vector)))
-        if  !divides(l,2*inner_product(space,collect(b),vector),ring)
+        if  !divides(l,2*Hecke.inner_product(space,collect(b),vector),ring)
             return false
         end
     end
@@ -299,7 +358,7 @@ function is_root(space,ring,vector)
     @info "✓ crystallographic"
 
     #Not gonna work since it is only up to squared units: neeed to use the morphisms constructed in possible_root_norms_up_to_squared_units
-    #@assert inner_product(space,vector,vector) ∈ possible_root_norms_up_to_squared_units(space,ring)
+    #@assert Hecke.inner_product(space,vector,vector) ∈ possible_root_norms_up_to_squared_units(space,ring)
 
     return true
 
@@ -391,6 +450,7 @@ mutable struct VinbergData
 
     least_k_by_root_length::Maybe{Dict}
     roots_in_stock::Vector
+    accepted_roots::Vector
     
 end
 
@@ -411,7 +471,7 @@ function VinbergData(field,matrix)
 
     least_k_by_root_length = Dict([ring(l) => (ring(0),NfAbsOrdElem{AnticNumberField,nf_elem}[]) for l in possible_root_norms_up_to_squared_units(ring,field,quad_space)])
     
-    vd = VinbergData(dim,field,ring,matrix,quad_space,quad_lattice,least_k_by_root_length,[])
+    vd = VinbergData(dim,field,ring,matrix,quad_space,quad_lattice,least_k_by_root_length,[],[])
 
     return vd
 
@@ -460,11 +520,13 @@ function enumerate_k(vd::VinbergData,l,k_min,k_max)
     candidates = non_neg_short_t2_elems(ring, k_min_squared_approx-1 , k_max_squared_approx  + M + 1)
     # the -1 and +1 are just here to have a security margin
     
+    candidates = vcat(candidates, .- candidates)
+
     # Only k≥0
-    filter!(
-        k -> field(k) ≥ 0,
-        candidates,    
-    )
+    #filter!(
+    #    k -> field(k) ≥ 0,
+    #    candidates,    
+    #)
     
    
     # crystallographic_condition
@@ -538,25 +600,29 @@ function extend_root_stem(vd::VinbergData,stem,root_length)
 
         @info tab * "stem is complete"
 
-        if is_root(space,ring,stem) && inner_product(vd.quad_space,stem,stem) == l
+        if is_root(space,ring,stem) && Hecke.inner_product(vd.quad_space,stem,stem) == l
             @info tab * "and it's a root of length $l"
             return [stem]
         else
-            @info tab * "and it's bad (length is $(inner_product(vd.quad_space,stem,stem)))"
+            @info tab * "and it's bad (length is $(Hecke.inner_product(vd.quad_space,stem,stem)))"
             return Vector{nf_elem}()
         end
     else
         
         @info tab * "stem is not complete"
         
+
         α = d[j]
         S_j = l - sum([d[i]*stem[i]^2 for i in 1:length(stem)]) 
-        candidates_k_j = non_neg_short_t2_elems(vd.ring, 0,sum_at_places(field(S_j//α),1))
+        candidates_k_j = non_neg_short_t2_elems(vd.ring, 0,sum_at_places(field(S_j//α),1)+1) # TODO the +1 here is because of inexact computations --> can we make everything exact? --> yes in this case since sum_at_places ranges over all places, so probably just a trace or an exact t2 computation
+
+        candidates_k_j = vcat(candidates_k_j, .- candidates_k_j)
         
         @info tab * "candidates for j=$j are $candidates_k_j"
 
-        filter!(≥(0),candidates_k_j)
-        @info tab * "only pos            are $candidates_k_j"
+        #filter!(≥(0),candidates_k_j)
+        #@info tab * "only pos            are $candidates_k_j"
+        
         filter!(
             k-> all(≤(field(α*k^2),field(S_j),p) for p in P),
             candidates_k_j
@@ -589,23 +655,95 @@ function next_root!(vd::VinbergData)
 end
 
 
+function cone_roots!(vd::VinbergData)
+    roots_at_distance_zero = []
+    
+    while true
+        root = next_root!(vd)
+        
+        if root[1] ≠ 0
+            pushfirst!(vd.roots_in_stock,root)
+            break
+        end
+        
+        push!(roots_at_distance_zero,root)
 
+    end
+
+    cone_roots = []
+    @info "starting with $(length(roots_at_distance_zero)) at dist zero"
+
+
+    for r in roots_at_distance_zero
+        @info "looking at $r"
+        if  all((-1)*r ≠ cr for cr in cone_roots)
+            @info "so far so good"
+            if is_necessary_halfspace(cone_roots,-vd.gram_matrix.entries*r)
+                @info "degeneration"
+                push!(cone_roots,r)
+            end
+        
+        end
+        @info "have $(length(cone_roots)) cone roots" 
+    end
+    
+    cone_roots = drop_redundant_halfspaces(cone_roots)
+    @info "have $(length(cone_roots)) cone roots" 
+    return cone_roots
+end
+
+basepoint(vd::VinbergData) = vd.field.(vcat([1],zeros(Int,vd.dim-1)))
+
+function enumerate_roots!(vd)
+
+    roots = cone_roots!(vd)
+    
+    rounds = 0
+    while rounds < 100
+        root = next_root!(vd)
+        
+        if Hecke.inner_product(vd.quad_space,basepoint(vd),root) ≤ 0 && 
+            all(Hecke.inner_product(vd.quad_space,prev,root) ≤ 0 for prev in roots)
+            push!(roots,root)
+            println("New root : ", root)
+        end
+        
+        rounds += 1
+        
+    end
+    
+    return roots
+
+end
 
 
 
 Qx, x = Hecke.QQ["x"]
-f = x^2 - 5
+f = x^2 - 2
 K, a = Hecke.NumberField(f, "a"); @assert istotally_real(K)
-M = matrix(K, 2, 2, [a, 0, 0 , 1]) # The bilinear form
+M = matrix(K, 3, 3, [-1+a,0,0, 0,1,0, 0,0,1]) # The bilinear form
 
+#=
+r@fedora ~/U/v/r/A/build (master)> ./alvin -k=Q[sqrt 2] -qf -1-T,1,1
+Quadratic form (2,1): -1 - 1 * T(2), 1, 1
+Field of definition: Q[ sqrt(2) ]
 
+Vectors: 
+	e1 = (0, -1, 1)
+	e2 = (0, 0, -1)
+	e3 = (1, 1 + 1 * T(2), 0)
+Algorithm ended
+
+Graph written in the file: 
+	output/2-1+T2,1,1.coxiter
+
+Computation time: 0.0736732s
+=# 
 
 #
 #
 #########################
 ##
-#QK,Qa = Hecke.rationals_as_number_field()
-#OQK = ring_of_integers(QK)
-#QM = matrix(QK, 4, 4, [-1,0,0,0,  0,2,0,0,  0,0,6,0,  0,0,0,6])
-#QV = quadratic_space(QK,QM)
+QK,Qa = Hecke.rationals_as_number_field()
+QM = matrix(QK, 4, 4, [-1,0,0,0,  0,2,0,0,  0,0,6,0,  0,0,0,6])
 #
