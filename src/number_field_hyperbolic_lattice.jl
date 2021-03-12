@@ -615,8 +615,15 @@ end
 function next_min_ratio!(vd::VinbergData)
     field = vd.field
     min_pair = nothing
+
+    val(k,l) = field(k^2)//field(l)
+    
+    @info "next_min_ratio"
+
     for (l,(k,remaining)) in vd.least_k_by_root_length
-        if isnothing(min_pair) || field(k^2)//field(l) < field(min_pair[1]^2)//field(min_pair[2])
+        @info "$l and $k give $(approx(val(k,l)))"
+        if isnothing(min_pair) || val(k,l) < val(min_pair...)
+            @info "keeping $l, $k"
             min_pair = (k,l)
         end
     end
@@ -747,6 +754,8 @@ function cone_roots!(vd::VinbergData)
 end
 
 basepoint(vd::VinbergData) = vd.field.(vcat([1],zeros(Int,vd.dim-1)))
+length(vd,root) = Hecke.inner_product(vd.quad_space,root,root)
+fake_dist_to_basepoint(vd,root) = (root[1]^2//length(vd,root))
 
 function enumerate_roots!(vd)
 
@@ -761,8 +770,7 @@ function enumerate_roots!(vd)
         
         @info "Candidate $root"
 
-        if Hecke.inner_product(vd.quad_space,basepoint(vd),root) ≤ 0 && 
-            all(Hecke.inner_product(vd.quad_space,prev,root) ≤ 0 for prev in vd.accepted_roots)
+        if Hecke.inner_product(vd.quad_space,basepoint(vd),root) ≤ 0 && all(Hecke.inner_product(vd.quad_space,prev,root) ≤  0 for prev in vd.accepted_roots)
             println("New root : ", root)
 
             extend!(diagram,[Coxeter_coeff(vd.quad_space, vd.ring, r,root) for r in vd.accepted_roots])
