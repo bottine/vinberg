@@ -7,7 +7,8 @@ using AbstractAlgebra
 using Convex, Cbc, COSMO
 import MathOptInterface
 
-
+include("util.jl")
+include("diagrams.jl")
 
 
 
@@ -39,9 +40,46 @@ function products(d)
     return [prod([k^p for (k,p) in zip(ks,pp)]) for pp in partial_products]
 end
 
+"""
+    Coxeter_coeff(r₁,r₂)
 
+Compute the label corresponding to the edge between the vertices corresponding to the hyperplanes defined by `r₁` and `r₂` respectively.
 
-# make exact
+# Remarks
+
+* This is incomplete, and only works for acute angles I think.
+* The code is copied from B&P, and I haven't yet made in more general.
+"""
+function Coxeter_coeff(space, ring, r₁, r₂)
+    @toggled_assert is_root(space, ring, r₁) && is_root(space, ring, r₂) "The elements must be roots"
+
+    angle = Hecke.inner_product(space,r₁,r₂)
+    cos² = approx(angle^2//(Hecke.inner_product(space,r₁,r₁)*Hecke.inner_product(space,r₂,r₂)))
+    if cos² == 0
+        return 2
+    elseif cos² == 1
+        return 0
+    elseif cos² > 1
+        return 1
+    else
+
+        #   cos(π/m)² = r₁⋅r₂ / r₁² r₂² 
+        # ⇒ cos(π/m) = √(r₁⋅r₂/r₁r₂)
+        # ⇒ m = π/acos(√(r₁⋅r₂/r₁r₂))
+
+        # TODO Is this rounding dangerous?
+        #      Can the angle be different from a submultiple of π? if yes, how to deal with it?
+
+        m = round(Int, π/acos(√cos²))
+
+        return m
+    end
+
+end
+
+get_Coxeter_matrix(space, ring, roots) = reduce(hcat,[[Coxeter_coeff(space, ring, r₁,r₂) for r₁ in roots] for r₂ in roots])
+
+# TODO: make exact
 function is_necessary_halfspace(cone_roots,root) 
     
     float_cone_roots = Vector{Vector{Float64}}([approx.(cone_root) for cone_root in cone_roots])    
@@ -191,7 +229,7 @@ function short_t2_elems(O::NfAbsOrd, lb, ub)
     basis = Hecke.basis(O)
 
     lat = Hecke.short_vectors(Zlattice(gram = trace), lb, ub)
-    candidates = [O(dot(basis,v)) for (v,t) in lat]
+    candidates = [O(Hecke.dot(basis,v)) for (v,t) in lat]
 
 
 
@@ -210,6 +248,15 @@ end
 
 approx(x) = Float64(conjugates_real(x)[1])
 approx(x::NfAbsOrdElem{AnticNumberField,nf_elem}) = conjugates_real(x.elem_in_nf)[1]
+
+function diagm(K::AnticNumberField,diag)
+    n = length(diag)
+    M = fill(K(0),n,n)
+    for i in 1:n
+        M[i,i] = K(diag[i])
+    end
+    return matrix(K,M)
+end
 
 ###############################################################################
 ###############################################################################
@@ -303,7 +350,7 @@ function is_integral(space,ring,vector)
     field = space.K
     
     for c in vector
-        if !in(field(c),ring)
+        if !Hecke.in(field(c),ring)
             return false
         end
     end
@@ -339,23 +386,23 @@ end
 
 function is_root(space,ring,vector)
 
-    @info "is_root($vector)"
+    @debug "is_root($vector)"
 
     !has_positive_norm(space,ring,vector) && return false
     
-    @info "✓ positive length"
+    @debug "✓ positive length"
 
     !is_integral(space,ring,vector) && return false
     
-    @info "✓ integral"
+    @debug "✓ integral"
 
     !is_primitive(space,ring,vector) && return false
     
-    @info "✓ primitive"
+    @debug "✓ primitive"
 
     !crystallographic_condition(space,ring,vector) && return false 
     
-    @info "✓ crystallographic"
+    @debug "✓ crystallographic"
 
     #Not gonna work since it is only up to squared units: neeed to use the morphisms constructed in possible_root_norms_up_to_squared_units
     #@assert Hecke.inner_product(space,vector,vector) ∈ possible_root_norms_up_to_squared_units(space,ring)
@@ -449,7 +496,7 @@ mutable struct VinbergData
     lattice#::Maybe{QuadLat{AnticNumberField,AbstractAlgebra.Generic.MatSpaceElem{nf_elem},Hecke.PMat{nf_elem,Hecke.NfAbsOrdFracIdl{AnticNumberField,nf_elem}}}}
 
     least_k_by_root_length::Maybe{Dict}
-    roots_in_stock::Vector
+    candidate_roots::Vector
     accepted_roots::Vector
     
 end
@@ -569,7 +616,7 @@ function next_min_ratio!(vd::VinbergData)
     field = vd.field
     min_pair = nothing
     for (l,(k,remaining)) in vd.least_k_by_root_length
-        if isnothing(min_pair) || field(k)//field(l) < field(min_pair[1])//field(min_pair[2])
+        if isnothing(min_pair) || field(k^2)//field(l) < field(min_pair[1]^2)//field(min_pair[2])
             min_pair = (k,l)
         end
     end
@@ -594,22 +641,22 @@ function extend_root_stem(vd::VinbergData,stem,root_length)
     j = length(stem) + 1
     l = root_length
     tab = "  "^j
-    @info tab * "extend_root_stem($stem, $root_length)"
+    #@info tab * "extend_root_stem($stem, $root_length)"
 
     if j == vd.dim + 1
 
-        @info tab * "stem is complete"
+        #@info tab * "stem is complete"
 
         if is_root(space,ring,stem) && Hecke.inner_product(vd.quad_space,stem,stem) == l
-            @info tab * "and it's a root of length $l"
+            #@info tab * "and it's a root of length $l"
             return [stem]
         else
-            @info tab * "and it's bad (length is $(Hecke.inner_product(vd.quad_space,stem,stem)))"
+            #@info tab * "and it's bad (length is $(Hecke.inner_product(vd.quad_space,stem,stem)))"
             return Vector{nf_elem}()
         end
     else
         
-        @info tab * "stem is not complete"
+        #@info tab * "stem is not complete"
         
 
         α = d[j]
@@ -618,7 +665,7 @@ function extend_root_stem(vd::VinbergData,stem,root_length)
 
         candidates_k_j = vcat(candidates_k_j, .- candidates_k_j)
         
-        @info tab * "candidates for j=$j are $candidates_k_j"
+        #@info tab * "candidates for j=$j are $candidates_k_j"
 
         #filter!(≥(0),candidates_k_j)
         #@info tab * "only pos            are $candidates_k_j"
@@ -627,12 +674,12 @@ function extend_root_stem(vd::VinbergData,stem,root_length)
             k-> all(≤(field(α*k^2),field(S_j),p) for p in P),
             candidates_k_j
         )
-        @info tab * "OK norm             are $candidates_k_j"
+        #@info tab * "OK norm             are $candidates_k_j"
         filter!(
             k -> divides(l,2*k*α,ring),
             candidates_k_j,    
         )
-        @info tab * "OK crystal          are $candidates_k_j"
+        #@info tab * "OK crystal          are $candidates_k_j"
         
         return vcat([extend_root_stem(vd,vcat(stem,[k]),root_length) for k in candidates_k_j]...)
     end
@@ -648,10 +695,10 @@ end
 
 
 function next_root!(vd::VinbergData)
-    while isempty(vd.roots_in_stock)
-        vd.roots_in_stock = next_roots!(vd)
+    while isempty(vd.candidate_roots)
+        vd.candidate_roots = next_roots!(vd)
     end
-    return pop!(vd.roots_in_stock)
+    return pop!(vd.candidate_roots)
 end
 
 
@@ -662,29 +709,36 @@ function cone_roots!(vd::VinbergData)
         root = next_root!(vd)
         
         if root[1] ≠ 0
-            pushfirst!(vd.roots_in_stock,root)
+            pushfirst!(vd.candidate_roots,root)
             break
         end
         
         push!(roots_at_distance_zero,root)
 
     end
+    
+    # We put first the roots with integer coordinates to maximize the chance of having them in the cone roots
+    # It's not necessary but easier to analyze the output and compare with rgug then
+    integer_roots = filter!(r -> all(isinteger,vd.field.(r)), roots_at_distance_zero) 
+    sort!(integer_roots)
+    prepend!(integer_roots,roots_at_distance_zero)
+
 
     cone_roots = []
-    @info "starting with $(length(roots_at_distance_zero)) at dist zero"
+    @debug "starting with $(length(roots_at_distance_zero)) at dist zero"
 
 
     for r in roots_at_distance_zero
-        @info "looking at $r"
+        @debug "looking at $r"
         if  all((-1)*r ≠ cr for cr in cone_roots)
-            @info "so far so good"
+            @debug "so far so good"
             if is_necessary_halfspace(cone_roots,-vd.gram_matrix.entries*r)
-                @info "degeneration"
+                @debug "degeneration"
                 push!(cone_roots,r)
             end
         
         end
-        @info "have $(length(cone_roots)) cone roots" 
+        @debug "have $(length(cone_roots)) cone roots" 
     end
     
     cone_roots = drop_redundant_halfspaces(cone_roots)
@@ -696,23 +750,39 @@ basepoint(vd::VinbergData) = vd.field.(vcat([1],zeros(Int,vd.dim-1)))
 
 function enumerate_roots!(vd)
 
-    roots = cone_roots!(vd)
+    vd.accepted_roots = cone_roots!(vd)
     
-    rounds = 0
-    while rounds < 100
+    Coxeter_matrix = get_Coxeter_matrix(vd.quad_space, vd.ring, vd.accepted_roots) 
+    diagram = build_diagram_and_subs(Coxeter_matrix,vd.dim-1)
+    
+
+    while length(vd.accepted_roots) < 100
         root = next_root!(vd)
         
+        @info "Candidate $root"
+
         if Hecke.inner_product(vd.quad_space,basepoint(vd),root) ≤ 0 && 
-            all(Hecke.inner_product(vd.quad_space,prev,root) ≤ 0 for prev in roots)
-            push!(roots,root)
+            all(Hecke.inner_product(vd.quad_space,prev,root) ≤ 0 for prev in vd.accepted_roots)
             println("New root : ", root)
+
+            extend!(diagram,[Coxeter_coeff(vd.quad_space, vd.ring, r,root) for r in vd.accepted_roots])
+            push!(vd.accepted_roots,root)
+            
+            println("Matrix is")
+            display(get_Coxeter_matrix(vd.quad_space, vd.ring, vd.accepted_roots))
+
+            if is_finite_volume(diagram)
+                @info "And the diagram has finite volume."
+                break
+            end
+
         end
         
-        rounds += 1
-        
     end
+    println("Matrix is")
+    display(get_Coxeter_matrix(vd.quad_space, vd.ring, vd.accepted_roots))
     
-    return roots
+    return vd.accepted_roots
 
 end
 
@@ -746,4 +816,4 @@ Computation time: 0.0736732s
 ##
 QK,Qa = Hecke.rationals_as_number_field()
 QM = matrix(QK, 4, 4, [-1,0,0,0,  0,2,0,0,  0,0,6,0,  0,0,0,6])
-#
+
