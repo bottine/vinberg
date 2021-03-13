@@ -251,7 +251,7 @@ function non_neg_short_t2_elems(O::NfAbsOrd, lb, ub)
 end
 
 approx(x) = Float64(conjugates_real(x)[1])
-approx(x::NfAbsOrdElem{AnticNumberField,nf_elem}) = conjugates_real(x.elem_in_nf)[1]
+approx(x::NfAbsOrdElem{AnticNumberField,nf_elem}) = Float64(conjugates_real(x.elem_in_nf)[1])
 
 function diagm(K::AnticNumberField,diag)
     n = length(diag)
@@ -523,9 +523,6 @@ function VinbergData(field,matrix)
     quad_space = quadratic_space(field, matrix)
     #quad_lattice = Hecke.lattice(quad_space)
 
-    println("VinbergData($field,$matrix)")
-    println("matrix of type $(typeof(matrix))")
-
     @assert all(field(c) ∈ ring for c in matrix) "The Gram matrix must have coefficients in the ring of integers."
 
     @assert is_diago_and_feasible(field,matrix)
@@ -574,14 +571,13 @@ function enumerate_k(vd::VinbergData,l,k_min,k_max)
     ring = vd.ring
     field = vd.field
 
-    α = vd.gram_matrix[1,1]
+    α = diag_coeff(vd,1)
     @assert α < 0 
 
     M = sum_at_places(field(l//α),2)
     P = infinite_places(field)
-    k_min_squared_approx = Float64(conjugates_real(field(k_min^2),32)[1])
-    k_max_squared_approx = Float64(conjugates_real(field(k_max^2),32)[1])
-
+    k_min_squared_approx = approx(k_min^2)
+    k_max_squared_approx = approx(k_max^2)
 
     candidates = non_neg_short_t2_elems(ring, k_min_squared_approx-1 , k_max_squared_approx  + M + 1)
     # the -1 and +1 are just here to have a security margin
@@ -601,7 +597,7 @@ function enumerate_k(vd::VinbergData,l,k_min,k_max)
         candidates,    
     )
     
-    # conjugates are pos-def and bounded length
+    # conjugates are of bounded length
     filter!(
         k -> all(≤(α*k^2,l,p) for p in P[2:end]),
         candidates,
@@ -637,6 +633,7 @@ function next_min_ratio(vd)
     field = vd.field
     min_pair = nothing
 
+    # that's the value we want to minimize (related to the distance)
     val(k,l) = field(k^2)//field(l)
     
 
@@ -684,7 +681,7 @@ function extend_root_stem(vd::VinbergData,stem,root_length,bounds=nothing)
 
         #@info tab * "stem is complete"
 
-        if is_root(space,ring,stem) && Hecke.inner_product(vd.quad_space,stem,stem) == l
+        if is_root(space,ring,stem) && ⊙(stem,vd,stem) == l
             #@info tab * "and it's a root of length $l"
             return [stem]
         else
@@ -696,8 +693,8 @@ function extend_root_stem(vd::VinbergData,stem,root_length,bounds=nothing)
         #@info tab * "stem is not complete"
         
 
-        α = d[j]
-        S_j = l - sum([d[i]*stem[i]^2 for i in 1:length(stem)]) 
+        α = diag_coeff(vd,j)
+        S_j = l - sum([diag_coeff(vd,i)*stem[i]^2 for i in 1:length(stem)]) 
         candidates_k_j = non_neg_short_t2_elems(vd.ring, 0,sum_at_places(field(S_j//α),1)+1) # TODO the +1 here is because of inexact computations --> can we make everything exact? --> yes in this case since sum_at_places ranges over all places, so probably just a trace or an exact t2 computation
 
         candidates_k_j = vcat(candidates_k_j, .- candidates_k_j)
@@ -727,7 +724,7 @@ function extend_root_stem(vd::VinbergData,stem,root_length,bounds=nothing)
     
 end
 
-function next_roots!(vd::VinbergData)
+function next_candidate_roots!(vd::VinbergData)
     (k,l) = next_min_ratio!(vd)
     #@info "next_roots for l=$l and k = $k"
     return extend_root_stem(vd,[k],l,[-k*diag_coeff(vd,1)*r[1] for r in vd.accepted_roots])
@@ -735,9 +732,9 @@ end
 
 
 
-function next_root!(vd::VinbergData)
+function next_candidate_root!(vd::VinbergData)
     while isempty(vd.candidate_roots)
-        vd.candidate_roots = [[c.elem_in_nf for c in r] for r in next_roots!(vd)]
+        vd.candidate_roots = [[c.elem_in_nf for c in r] for r in next_candidate_roots!(vd)]
     end
     return pop!(vd.candidate_roots)
 end
@@ -750,7 +747,7 @@ function cone_roots!(vd::VinbergData)
     roots_at_distance_zero = []
     
     while true
-        root = next_root!(vd)
+        root = next_candidate_root!(vd)
         
         if root[1] ≠ 0
             pushfirst!(vd.candidate_roots,root)
@@ -791,20 +788,22 @@ function cone_roots!(vd::VinbergData)
 end
 
 
-function enumerate_roots!(vd)
+function find_roots!(vd;max=100)
 
     vd.accepted_roots = cone_roots!(vd)
     
     Coxeter_matrix = get_Coxeter_matrix(vd.quad_space, vd.ring, vd.accepted_roots) 
     diagram = build_diagram_and_subs(Coxeter_matrix,vd.dim-1)
     
-
-    while length(vd.accepted_roots) < 100
-        root = next_root!(vd)
+    num = 0
+    while num < 100 
+        root = next_candidate_root!(vd)
         
         @info "Candidate $root"
 
-        if Hecke.inner_product(vd.quad_space,basepoint(vd),root) ≤ 0 && all(Hecke.inner_product(vd.quad_space,prev,root) ≤  0 for prev in vd.accepted_roots)
+        if ⊙(basepoint(vd),vd,root) ≤ 0 && all(⊙(prev,vd,root) ≤  0 for prev in vd.accepted_roots)
+        
+            num += 1
 
             vd.stage = MoreRoots
 
