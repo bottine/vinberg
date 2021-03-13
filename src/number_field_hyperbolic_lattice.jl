@@ -537,6 +537,12 @@ function VinbergData(field,matrix)
 
 end
 
+diag_coeff(vd::VinbergData,i::Int) = vd.gram_matrix[i,i] 
+
+basepoint(vd::VinbergData) = vd.field.(vcat([1],zeros(Int,vd.dim-1)))
+vector_length(vd,root) = Hecke.inner_product(vd.quad_space,root,root)
+fake_dist_to_basepoint(vd,root) = (root[1]^2//vector_length(vd,root))
+⊙(v,vd::VinbergData,w) = Hecke.inner_product(vd.quad_space,v,w)
 
 # useless but kept for reference
 function Base.getproperty(vd::VinbergData,::Val{:ring})
@@ -648,9 +654,16 @@ function next_min_ratio!(vd)
     return min_pair
 end
 
+zero_from(v,i) = all(==(0),v[i:end])
 
-function extend_root_stem(vd::VinbergData,stem,root_length)
+function extend_root_stem(vd::VinbergData,stem,root_length,bounds=nothing)
+   
+    j = length(stem) + 1
     
+    if !isnothing(bounds) && any( bound < 0 && zero_from(root,j) for (root, bound) in zip(vd.accepted_roots,bounds))
+        println("out of bounds!")
+        return Vector{nf_elem}()
+    end
 
     @assert isdiagonal(vd.gram_matrix)
     field = vd.field
@@ -662,7 +675,6 @@ function extend_root_stem(vd::VinbergData,stem,root_length)
 
     # stem = [k₀,…,k_j]
 
-    j = length(stem) + 1
     l = root_length
     tab = "  "^j
     #@info tab * "extend_root_stem($stem, $root_length)"
@@ -704,8 +716,12 @@ function extend_root_stem(vd::VinbergData,stem,root_length)
             candidates_k_j,    
         )
         #@info tab * "OK crystal          are $candidates_k_j"
-        
-        return vcat([extend_root_stem(vd,vcat(stem,[k]),root_length) for k in candidates_k_j]...)
+        bounds_updated(k) = if bounds === nothing
+            nothing
+        else
+            [b - diag_coeff(vd,j)*k*r[j] for (b,r) in zip(bounds,vd.accepted_roots)]
+        end
+        return vcat([extend_root_stem(vd,vcat(stem,[k]),root_length,bounds_updated(k)) for k in candidates_k_j]...)
     end
     
 end
@@ -713,7 +729,7 @@ end
 function next_roots!(vd::VinbergData)
     (k,l) = next_min_ratio!(vd)
     @info "next_roots for l=$l and k = $k"
-    return extend_root_stem(vd,[k],l)
+    return extend_root_stem(vd,[k],l,[-k*diag_coeff(vd,1)*r[1] for r in vd.accepted_roots])
 end
 
 
@@ -772,10 +788,6 @@ function cone_roots!(vd::VinbergData)
     @info "have $(length(cone_roots)) cone roots" 
     return cone_roots
 end
-
-basepoint(vd::VinbergData) = vd.field.(vcat([1],zeros(Int,vd.dim-1)))
-vector_length(vd,root) = Hecke.inner_product(vd.quad_space,root,root)
-fake_dist_to_basepoint(vd,root) = (root[1]^2//vector_length(vd,root))
 
 function enumerate_roots!(vd)
 
