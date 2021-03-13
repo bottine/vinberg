@@ -1,16 +1,19 @@
-using LinearAlgebra
-using JSON
-using StaticArrays
 using ToggleableAsserts
 using Hecke
-using AbstractAlgebra
-using Convex, Cbc, COSMO
+import AbstractAlgebra
+import LinearAlgebra
 import MathOptInterface
+
+using Convex
+import Cbc, COSMO
 
 #include("util.jl")
 include("diagrams.jl")
 
 using Main.Diagrams: build_diagram_and_subs, extend!, is_finite_volume
+
+
+
 
 
 
@@ -122,7 +125,6 @@ end
 function drop_redundant_halfspaces(
     roots
 ) 
-    
     
     for i in length(roots):-1:1
        
@@ -377,7 +379,7 @@ end
 function crystallographic_condition(space,ring,vector)
     l = Hecke.inner_product(space,vector,vector)
 
-    for b in eachcol(I(length(vector)))
+    for b in eachcol(LinearAlgebra.I(length(vector)))
         if  !divides(l,2*Hecke.inner_product(space,collect(b),vector),ring)
             return false
         end
@@ -528,7 +530,6 @@ function VinbergData(field,matrix)
 
     @assert is_diago_and_feasible(field,matrix)
 
-
     least_k_by_root_length = Dict([ring(l) => (ring(0),NfAbsOrdElem{AnticNumberField,nf_elem}[]) for l in possible_root_norms_up_to_squared_units(ring,field,quad_space)])
     
     vd = VinbergData(Initialized,dim,field,ring,matrix,quad_space,#=quad_lattice,=#least_k_by_root_length,[],[])
@@ -661,7 +662,7 @@ function extend_root_stem(vd::VinbergData,stem,root_length,bounds=nothing)
     j = length(stem) + 1
     
     if !isnothing(bounds) && any( bound < 0 && zero_from(root,j) for (root, bound) in zip(vd.accepted_roots,bounds))
-        println("out of bounds!")
+        #println("out of bounds!")
         return Vector{nf_elem}()
     end
 
@@ -728,7 +729,7 @@ end
 
 function next_roots!(vd::VinbergData)
     (k,l) = next_min_ratio!(vd)
-    @info "next_roots for l=$l and k = $k"
+    #@info "next_roots for l=$l and k = $k"
     return extend_root_stem(vd,[k],l,[-k*diag_coeff(vd,1)*r[1] for r in vd.accepted_roots])
 end
 
@@ -788,6 +789,7 @@ function cone_roots!(vd::VinbergData)
     @info "have $(length(cone_roots)) cone roots" 
     return cone_roots
 end
+
 
 function enumerate_roots!(vd)
 
