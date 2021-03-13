@@ -7,10 +7,10 @@ using AbstractAlgebra
 using Convex, Cbc, COSMO
 import MathOptInterface
 
-include("util.jl")
+#include("util.jl")
 include("diagrams.jl")
 
-
+using Main.Diagrams: build_diagram_and_subs, extend!, is_finite_volume
 
 
 
@@ -81,7 +81,9 @@ get_Coxeter_matrix(space, ring, roots) = reduce(hcat,[[Coxeter_coeff(space, ring
 
 # TODO: make exact
 function is_necessary_halfspace(cone_roots,root) 
-    
+   
+
+
     float_cone_roots = Vector{Vector{Float64}}([approx.(cone_root) for cone_root in cone_roots])    
     float_root = Vector{Float64}(approx.(root))
     
@@ -482,24 +484,32 @@ end
 ###
 
 
+@enum VinbergDataStage Initialized ConeRoots MoreRoots Done
 
 
 Maybe{T} = Union{T,Nothing}
 
 # Everything goes there, eventually
 mutable struct VinbergData
-    dim
-    field#::AnticNumberField
-    ring#::Maybe{NfAbsOrd{AnticNumberField,nf_elem}}
-    gram_matrix#::AbstractAlgebra.Generic.MatSpaceElem{NfAbsOrdElem{AnticNumberField,nf_elem}}
-    quad_space#::Maybe{Hecke.QuadSpace{AnticNumberField,AbstractAlgebra.Generic.MatSpaceElem{nf_elem}}}
-    lattice#::Maybe{QuadLat{AnticNumberField,AbstractAlgebra.Generic.MatSpaceElem{nf_elem},Hecke.PMat{nf_elem,Hecke.NfAbsOrdFracIdl{AnticNumberField,nf_elem}}}}
 
-    least_k_by_root_length::Maybe{Dict}
-    candidate_roots::Vector
-    accepted_roots::Vector
+    stage::VinbergDataStage 
+
+    dim::Int
+    field::AnticNumberField
+    ring::NfAbsOrd{AnticNumberField,nf_elem}
+    gram_matrix::AbstractAlgebra.Generic.MatSpaceElem{nf_elem}
+    quad_space::Hecke.QuadSpace{AnticNumberField,AbstractAlgebra.Generic.MatSpaceElem{nf_elem}}
+    #lattice::QuadLat{AnticNumberField,AbstractAlgebra.Generic.MatSpaceElem{nf_elem},Hecke.PMat{nf_elem,Hecke.NfAbsOrdFracIdl{AnticNumberField,nf_elem}}}
+
+
+    least_k_by_root_length::Dict{NfAbsOrdElem{AnticNumberField,nf_elem},Tuple{NfAbsOrdElem{AnticNumberField,nf_elem},Array{NfAbsOrdElem{
+    AnticNumberField,nf_elem},1}}}
+    candidate_roots::Vector{Vector{nf_elem}}
+    accepted_roots::Vector{Vector{nf_elem}}
     
 end
+
+
 
 function VinbergData(field,matrix)
 
@@ -509,7 +519,10 @@ function VinbergData(field,matrix)
 
     ring = maximal_order(field)
     quad_space = quadratic_space(field, matrix)
-    quad_lattice = Hecke.lattice(quad_space)
+    #quad_lattice = Hecke.lattice(quad_space)
+
+    println("VinbergData($field,$matrix)")
+    println("matrix of type $(typeof(matrix))")
 
     @assert all(field(c) ∈ ring for c in matrix) "The Gram matrix must have coefficients in the ring of integers."
 
@@ -518,11 +531,12 @@ function VinbergData(field,matrix)
 
     least_k_by_root_length = Dict([ring(l) => (ring(0),NfAbsOrdElem{AnticNumberField,nf_elem}[]) for l in possible_root_norms_up_to_squared_units(ring,field,quad_space)])
     
-    vd = VinbergData(dim,field,ring,matrix,quad_space,quad_lattice,least_k_by_root_length,[],[])
+    vd = VinbergData(Initialized,dim,field,ring,matrix,quad_space,#=quad_lattice,=#least_k_by_root_length,[],[])
 
     return vd
 
 end
+
 
 # useless but kept for reference
 function Base.getproperty(vd::VinbergData,::Val{:ring})
@@ -550,8 +564,6 @@ and we will know that if ``0≤k≤n``, then ``t₂(k) ≤ k² + GM``, where ``G
 """
 function enumerate_k(vd::VinbergData,l,k_min,k_max)
     
-    println("hello enumerate k for $l (k_min=$k_min, k_max=$k_max)")
-
     ring = vd.ring
     field = vd.field
 
@@ -569,11 +581,11 @@ function enumerate_k(vd::VinbergData,l,k_min,k_max)
     
     candidates = vcat(candidates, .- candidates)
 
-    # Only k≥0
-    #filter!(
-    #    k -> field(k) ≥ 0,
-    #    candidates,    
-    #)
+    #Only k≥0
+    filter!(
+        k -> field(k) ≥ 0,
+        candidates,    
+    )
     
    
     # crystallographic_condition
@@ -592,41 +604,46 @@ function enumerate_k(vd::VinbergData,l,k_min,k_max)
 end
 
 
-
-
-
-
-function next_min_k_for_l!(vd,l)
-
-    (current_k,remaining) = vd.least_k_by_root_length[l] 
+function next_min_k_for_l(vd,current_k,remaining_k,l)
 
     k_min,k_max = current_k,current_k+10
 
-    while isempty(remaining)
-        remaining = enumerate_k(vd,l,k_min,k_max)
-        filter!(>(current_k),remaining)
-        sort!(remaining)
+    while isempty(remaining_k)
+        remaining_k = enumerate_k(vd,l,k_min,k_max)
+        filter!(>(current_k),remaining_k)
+        sort!(remaining_k)
         k_min,k_max = k_max,k_max+10
     end
-    new_k = popfirst!(remaining)
-    vd.least_k_by_root_length[l] = (new_k,remaining)
+    new_k = popfirst!(remaining_k)
+    return (new_k,remaining_k)
 end
 
-function next_min_ratio!(vd::VinbergData)
+function next_min_k_for_l!(vd,l)
+
+    (current_k,remaining_k) = vd.least_k_by_root_length[l] 
+    (new_k,new_remaining_k) = next_min_k_for_l(vd,current_k,remaining_k,l)
+    vd.least_k_by_root_length[l] = (new_k,new_remaining_k)
+
+end
+
+function next_min_ratio(vd)
     field = vd.field
     min_pair = nothing
 
     val(k,l) = field(k^2)//field(l)
     
-    @info "next_min_ratio"
 
     for (l,(k,remaining)) in vd.least_k_by_root_length
-        @info "$l and $k give $(approx(val(k,l)))"
         if isnothing(min_pair) || val(k,l) < val(min_pair...)
-            @info "keeping $l, $k"
             min_pair = (k,l)
         end
     end
+    return min_pair
+end
+
+function next_min_ratio!(vd)
+    
+    min_pair = next_min_ratio(vd)
     next_min_k_for_l!(vd,min_pair[2])
     return min_pair
 end
@@ -703,13 +720,16 @@ end
 
 function next_root!(vd::VinbergData)
     while isempty(vd.candidate_roots)
-        vd.candidate_roots = next_roots!(vd)
+        vd.candidate_roots = [[c.elem_in_nf for c in r] for r in next_roots!(vd)]
     end
     return pop!(vd.candidate_roots)
 end
 
 
 function cone_roots!(vd::VinbergData)
+
+    @assert vd.stage === Initialized "Too late to compute cone roots!"
+
     roots_at_distance_zero = []
     
     while true
@@ -747,15 +767,15 @@ function cone_roots!(vd::VinbergData)
         end
         @debug "have $(length(cone_roots)) cone roots" 
     end
-    
+
     cone_roots = drop_redundant_halfspaces(cone_roots)
     @info "have $(length(cone_roots)) cone roots" 
     return cone_roots
 end
 
 basepoint(vd::VinbergData) = vd.field.(vcat([1],zeros(Int,vd.dim-1)))
-length(vd,root) = Hecke.inner_product(vd.quad_space,root,root)
-fake_dist_to_basepoint(vd,root) = (root[1]^2//length(vd,root))
+vector_length(vd,root) = Hecke.inner_product(vd.quad_space,root,root)
+fake_dist_to_basepoint(vd,root) = (root[1]^2//vector_length(vd,root))
 
 function enumerate_roots!(vd)
 
@@ -771,6 +791,9 @@ function enumerate_roots!(vd)
         @info "Candidate $root"
 
         if Hecke.inner_product(vd.quad_space,basepoint(vd),root) ≤ 0 && all(Hecke.inner_product(vd.quad_space,prev,root) ≤  0 for prev in vd.accepted_roots)
+
+            vd.stage = MoreRoots
+
             println("New root : ", root)
 
             extend!(diagram,[Coxeter_coeff(vd.quad_space, vd.ring, r,root) for r in vd.accepted_roots])
@@ -780,6 +803,7 @@ function enumerate_roots!(vd)
             display(get_Coxeter_matrix(vd.quad_space, vd.ring, vd.accepted_roots))
 
             if is_finite_volume(diagram)
+                vd.stage = Done
                 @info "And the diagram has finite volume."
                 break
             end
